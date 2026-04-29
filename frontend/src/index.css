@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#0a0a0a] overflow-x-hidden;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-black/20;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-[#00ff88]/20 rounded-full hover:bg-[#00ff88]/30 transition-colors;
+}
+
+/* Monaco Editor customization */
+.monaco-editor .margin,
+.monaco-editor .monaco-editor-background {
+  @apply bg-black/50 !important;
+}
+
+/* Ensure main content doesn't overlap with fixed sidebar */
+main {
+  min-height: 100vh;
+}
+
+/* Improve sidebar scroll behavior */
+.sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 136, 0.2) rgba(0, 0, 0, 0.2);
+}
