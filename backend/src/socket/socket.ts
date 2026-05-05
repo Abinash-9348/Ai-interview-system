@@ -286,6 +286,23 @@ socket.on("tab-active", ({ roomId, user }) => {
     });
   }
 });
+ //video call
+   socket.on("video-offer", ({ roomId, offer, from, type }) => {
+      console.log("📥 Server forwarding video-offer", roomId, type);
+      socket.to(roomId).emit("video-offer", { offer, from, type });
+   });
 
-  }  )
+   socket.on("video-answer", ({ roomId, answer }) => {
+      socket.to(roomId).emit("video-answer", { answer });
+   });
+
+   socket.on("video-ice-candidate", ({ roomId, candidate }) => {
+      socket.to(roomId).emit("video-ice-candidate", { candidate });
+   });
+
+   socket.on("call-ended", ({ roomId }) => {
+      socket.to(roomId).emit("call-ended");
+   });
+   
+  });
 };

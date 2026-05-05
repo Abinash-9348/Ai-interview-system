@@ -7,6 +7,7 @@ import dotenv from 'dotenv'
 import { roomRouter } from "./routes/room.routes.ts";
 import cors from 'cors'
 import { codeexecuteRouter } from "./routes/codeexcute.routes.ts";
+import { limiter } from "./utils/ratelimit.ts";
 dotenv.config()
 
 
@@ -17,6 +18,7 @@ app.use(cors({
   methods: ["GET", "POST"]
 }));
 app.use(express.json())
+app.use(limiter)
 
 app.get("/", (_req, res) => {
   res.status(200).json({

@@ -6,6 +6,7 @@ import { initsocket } from "../socket";
 import { ACTION } from "../Action";
 import { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
+import CallModal from "../components/callModal";
 import {
   Play,
   ChevronDown,
@@ -100,6 +101,23 @@ const isCreator = creator === username;
   const [waitingUsers, setWaitingUsers] = useState<User[]>([]);
   const [isWaiting, setIsWaiting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+    const [activeCallType, setActiveCallType] = useState<"audio" | "video" | null>(null);
+    const [incomingCall, setIncomingCall] = useState<{ offer: any; from: string; type: "audio" | "video" } | null>(null);
+    const [pendingIceCandidates, setPendingIceCandidates] = useState<any[]>([]);
+
+ useEffect(() => {
+    const handleCall = () => {
+      console.log("📞 start call event triggered");
+      setActiveCallType("video"); // Default to video when opening via sidebar/nav
+    };
+
+    window.addEventListener("start-call", handleCall);
+
+    return () => {
+      window.removeEventListener("start-call", handleCall);
+    };
+  }, []);
+
   // ================= SOCKET =================
 type User = {
   socketId: string;
@@ -142,7 +160,7 @@ useEffect(() => {
 
   // ================= CONNECT =================
   socket.on("connect", () => {
-    console.log("✅ CONNECTED:", socket.id);
+    console.log("✅CONNECTED:", socket.id);
 
     // ⏳ Delay for Render backend wakeup
     setTimeout(() => {
@@ -154,8 +172,6 @@ useEffect(() => {
           color: "#ff4d4f",
         },
       });
-
-      console.log("🚀 JOIN SENT");
     }, 1000);
   });
 
@@ -202,6 +218,20 @@ useEffect(() => {
       if (exists) return prev;
       return [...prev, user];
     });
+  });
+
+  // ================= VIDEO CALL SIGNALING =================
+  socket.on("video-offer", ({ offer, from, type }) => {
+    console.log(`📥 Incoming ${type} offer from:`, from);
+    setIncomingCall({ offer, from, type });
+    setPendingIceCandidates([]); 
+    setActiveCallType(type);
+  });
+
+  socket.on("video-ice-candidate", ({ candidate }) => {
+    if (!activeCallType) {
+      setPendingIceCandidates((prev) => [...prev, candidate]);
+    }
   });
 
   // ================= JOIN =================
@@ -551,6 +581,7 @@ const handleVisibilityChange = () => {
     </div>
   </div>
 )}
+
       <div className="max-w-7xl mx-auto">
         {/* HEADER AREA */}
         {/* HEADER AREA */}
@@ -870,6 +901,22 @@ const handleVisibilityChange = () => {
                   );
                 })}
             </div>
+
+{activeCallType && socketRef.current && (
+  <CallModal
+    onClose={() => {
+      setActiveCallType(null);
+      setIncomingCall(null);
+      setPendingIceCandidates([]);
+    }}
+    socket={socketRef.current}
+    roomId={roomId!}
+    userId={userId}
+    incomingCall={incomingCall}
+    initialIceCandidates={pendingIceCandidates}
+    preSelectedType={activeCallType}
+  />
+)}
             {/* <button
               onClick={compileAndRun}
               disabled={isLoading}
