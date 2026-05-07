@@ -6,8 +6,8 @@ export const roomRouter=express.Router()
 roomRouter.post("/create",createRoomController)
 roomRouter.post("/join",joinRoomController)
 roomRouter.get("/get/:roomId",getRoomController)
-roomRouter.post("/locked" , rateLimit,lockRoomController)
-roomRouter.post("/unlocked",rateLimit,unlockRoomController)
+roomRouter.post("/locked" ,lockRoomController)
+roomRouter.post("/unlocked",unlockRoomController)
 roomRouter.get("/health",(_req,res)=>{
     console.log("health is ok")
     res.status(200).json({

@@ -420,7 +420,7 @@ const handleVisibilityChange = () => {
     if (navigator.share) {
       await navigator.share({
         title: "Join Room",
-        text: "Join my coding room 🚀",
+        text: "Join Abinash coding room 🚀",
         url: link, 
       });
     } else {

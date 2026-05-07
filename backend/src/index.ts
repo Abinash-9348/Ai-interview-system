@@ -18,7 +18,7 @@ app.use(cors({
   methods: ["GET", "POST"]
 }));
 app.use(express.json())
-app.use(limiter)
+
 
 app.get("/", (_req, res) => {
   res.status(200).json({
@@ -27,12 +27,11 @@ app.get("/", (_req, res) => {
     health: "/room/health"
   });
 });
-
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin:"http://localhost:5173",
+    origin:"https://code-editor-abinash.vercel.app ,http://localhost:5173 ",
     methods: ["GET", "POST"],
     credentials: true
   }
