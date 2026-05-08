@@ -286,6 +286,28 @@ socket.on("tab-active", ({ roomId, user }) => {
     });
   }
 });
+
+// ================= AI PROCTORING VIOLATIONS =================
+socket.on("violation", ({ roomId, type, username }) => {
+
+   console.log("⚠️ VIOLATION:", type);
+
+   const adminSocketId = adminSockets[roomId];
+
+   if(adminSocketId){
+
+      io.to(adminSocketId).emit(
+         "violation-alert",
+         {
+            roomId,
+            type,
+            username
+         }
+      );
+
+   }
+
+});
  //video call
    socket.on("video-offer", ({ roomId, offer, from, type }) => {
       console.log("📥 Server forwarding video-offer", roomId, type);

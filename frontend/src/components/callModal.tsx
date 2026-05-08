@@ -1,5 +1,3 @@
-// gemini
-
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Socket } from "socket.io-client";
@@ -9,11 +7,13 @@ import {
   Volume2, Minimize2, Maximize2, X 
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { FaceMesh } from "@mediapipe/face_mesh";
 
 interface Props {
   onClose: () => void;
   socket: Socket;
   roomId: string;
+  username: string;
   userId: string;
   incomingCall: { offer: any; from: string; type: "audio" | "video" } | null;
   initialIceCandidates: any[];
@@ -22,7 +22,7 @@ interface Props {
 
 type CallStatus = "idle" | "calling" | "incoming" | "connected" | "ended";
 
-export default function CallModal({ onClose, socket, roomId, userId, incomingCall, initialIceCandidates, preSelectedType }: Props) {
+export default function CallModal({ onClose, socket, roomId, userId, incomingCall, initialIceCandidates,username, preSelectedType }: Props) {
   // ✅ ORIGINAL LOGIC PRESERVED
   const [callType, setCallType] = useState<"audio" | "video">(incomingCall?.type || preSelectedType);
   const [status, setStatus] = useState<CallStatus>(incomingCall ? "incoming" : "idle");
@@ -37,6 +37,11 @@ export default function CallModal({ onClose, socket, roomId, userId, incomingCal
   const streamRef = useRef<MediaStream | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const pendingCandidates = useRef<RTCIceCandidateInit[]>(initialIceCandidates || []);
+  const [warning, setWarning] = useState("");
+
+  const creator = localStorage.getItem(`room_creator_${roomId}`);
+
+const isCreator = creator === username;
 
   // Force-Sync mode (Receiver Side)
   useEffect(() => {
@@ -44,6 +49,161 @@ export default function CallModal({ onClose, socket, roomId, userId, incomingCal
       setCallType(incomingCall.type);
     }
   }, [incomingCall?.type]);
+
+
+
+  useEffect(() => {
+ if(isCreator)return
+
+  if (!localVideoRef.current) return;
+
+  const faceMesh = new FaceMesh({
+    locateFile: (file) => {
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+    },
+  });
+
+  faceMesh.setOptions({
+    maxNumFaces: 2,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+
+  let previousNoseX: number | null = null;
+
+  let isProcessing = false;
+
+  faceMesh.onResults((results) => {
+
+    const faces = results.multiFaceLandmarks;
+
+    // ❌ No Face
+  if (!faces || faces.length === 0) {
+
+  console.log("❌ No Face");
+
+  setWarning("No Face Detected");
+
+  socket.emit("violation", {
+    roomId,
+    type: "No Face Detected",
+    username
+  });
+
+  return;
+}
+
+    // ⚠️ Multiple Face
+   if (faces.length > 1) {
+
+  console.log("⚠️ Multiple Faces");
+
+  setWarning("Multiple Faces Detected");
+
+  socket.emit("violation", {
+    roomId,
+    type: "Multiple Faces",
+    username
+  });
+
+  return;
+}
+
+    // ✅ Clear warning
+    setWarning("");
+
+    const landmarks = faces[0];
+
+    // ======================
+    // HEAD MOVEMENT
+    // ======================
+
+    const nose = landmarks[1];
+
+    if (previousNoseX !== null) {
+
+      const diff = Math.abs(
+        nose.x - previousNoseX
+      );
+
+     if (diff > 0.08) {
+
+  console.log("⚠️ Head Movement");
+
+  setWarning("Head Movement Detected");
+
+  socket.emit("violation", {
+    roomId,
+    type: "Head Movement",
+    username
+  });
+
+}
+    }
+
+    previousNoseX = nose.x;
+
+    // ======================
+    // EYE TRACKING
+    // ======================
+
+    const leftEye = landmarks[33];
+
+    const leftIris = landmarks[468];
+
+  if (leftIris.x < leftEye.x - 0.01) {
+
+  console.log("👀 Looking Left");
+
+  setWarning("Looking Left");
+
+  socket.emit("violation", {
+    roomId,
+    type: "Looking Left",
+    userId
+  });
+
+}
+
+  });
+
+  const interval = setInterval(async () => {
+
+    if (
+      localVideoRef.current &&
+      status === "connected" &&
+      callType === "video" &&
+      !isProcessing
+    ) {
+
+      try {
+
+        isProcessing = true;
+
+        await faceMesh.send({
+          image: localVideoRef.current,
+        });
+
+      } catch (err) {
+
+        console.log(err);
+
+      } finally {
+
+        isProcessing = false;
+      }
+    }
+
+  }, 500);
+
+  return () => {
+
+    clearInterval(interval);
+
+  };
+
+}, [status, callType]);
 
   // Hardware Isolation
   useEffect(() => {
@@ -309,6 +469,14 @@ export default function CallModal({ onClose, socket, roomId, userId, incomingCal
               </div>
             )}
           </div>
+
+          {/* {
+  warning && (
+    <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 bg-red-500 text-white px-4 py-2 rounded-xl font-bold">
+      {warning}
+    </div>
+  )
+} */}
 
           {/* Footer Controls - Hidden when Minimized */}
           {!isMinimized && (status === "calling" || status === "connected") && (

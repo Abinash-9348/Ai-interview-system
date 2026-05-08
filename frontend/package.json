@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.2.1",
+    "@mediapipe/face_mesh": "^0.4.1633559619",
     "@monaco-editor/react": "^4.6.0",
     "framer-motion": "^11.0.8",
     "lucide-react": "^0.344.0",

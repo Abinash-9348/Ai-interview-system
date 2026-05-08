@@ -296,6 +296,23 @@ socketRef.current?.on("user-tab-active", ({ message }) => {
 });
 
 
+// ================= AI VIOLATIONS =================
+socketRef.current?.off("violation-alert");
+
+socketRef.current?.on("violation-alert", (data) => {
+
+  console.log("⚠️ ADMIN WARNING:", data);
+
+toast.error(
+  `${data.username} → ${data.type}`,
+  {
+    id: `${data.username}-${data.type}`,
+  }
+);
+
+});
+
+
 // ================= CURSOR =================
 // ================= CURSOR =================
 socketRef.current?.off("cursor-update");
@@ -912,6 +929,7 @@ const handleVisibilityChange = () => {
     socket={socketRef.current}
     roomId={roomId!}
     userId={userId}
+    username={displayName}
     incomingCall={incomingCall}
     initialIceCandidates={pendingIceCandidates}
     preSelectedType={activeCallType}
