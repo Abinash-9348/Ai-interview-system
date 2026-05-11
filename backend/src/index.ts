@@ -8,6 +8,7 @@ import { roomRouter } from "./routes/room.routes.ts";
 import cors from 'cors'
 import { codeexecuteRouter } from "./routes/codeexcute.routes.ts";
 import { limiter } from "./utils/ratelimit.ts";
+import { userRouter } from "./routes/user.routes.ts";
 dotenv.config()
 
 
@@ -47,6 +48,7 @@ initSocket(io);
 
 app.use("/room",roomRouter)
 app.use("/code",codeexecuteRouter)
+app.use("/user",userRouter)
 
 server.listen(process.env.PORT, () => {
   console.log(`Server running on ${process.env.PORT}`);

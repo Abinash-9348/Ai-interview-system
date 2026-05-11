@@ -52,8 +52,9 @@ const isCreator = creator === username;
 
 
 
-  useEffect(() => {
- if(isCreator)return
+useEffect(() => {
+
+  if (isCreator) return;
 
   if (!localVideoRef.current) return;
 
@@ -74,50 +75,55 @@ const isCreator = creator === username;
 
   let isProcessing = false;
 
+  let lastEyeViolation = 0;
+
   faceMesh.onResults((results) => {
 
     const faces = results.multiFaceLandmarks;
 
-    // ❌ No Face
-  if (!faces || faces.length === 0) {
+    // ==========================
+    // NO FACE
+    // ==========================
 
-  console.log("❌ No Face");
+    if (!faces || faces.length === 0) {
 
-  setWarning("No Face Detected");
+      setWarning("No Face Detected");
 
-  socket.emit("violation", {
-    roomId,
-    type: "No Face Detected",
-    username
-  });
+      socket.emit("track-time", {
+        roomId,
+        userId,
+        username,
+        type: "no_face_detected",
+        duration: 0.5,
+      });
 
-  return;
-}
+      return;
+    }
 
-    // ⚠️ Multiple Face
-   if (faces.length > 1) {
+    // ==========================
+    // MULTIPLE FACES
+    // ==========================
 
-  console.log("⚠️ Multiple Faces");
+    if (faces.length > 1) {
 
-  setWarning("Multiple Faces Detected");
+      setWarning("Multiple Faces");
 
-  socket.emit("violation", {
-    roomId,
-    type: "Multiple Faces",
-    username
-  });
+      socket.emit("track-time", {
+        roomId,
+        userId,
+        username,
+        type: "multiple_faces",
+        duration: 0.5,
+      });
 
-  return;
-}
-
-    // ✅ Clear warning
-    setWarning("");
+      return;
+    }
 
     const landmarks = faces[0];
 
-    // ======================
+    // ==========================
     // HEAD MOVEMENT
-    // ======================
+    // ==========================
 
     const nose = landmarks[1];
 
@@ -127,44 +133,101 @@ const isCreator = creator === username;
         nose.x - previousNoseX
       );
 
-     if (diff > 0.08) {
+      if (diff > 0.08) {
 
-  console.log("⚠️ Head Movement");
+        setWarning("Head Movement");
 
-  setWarning("Head Movement Detected");
+        socket.emit("track-time", {
+          roomId,
+          userId,
+          username,
+          type: "head_movement",
+          duration: 0.5,
+        });
 
-  socket.emit("violation", {
-    roomId,
-    type: "Head Movement",
-    username
-  });
+      }
 
-}
     }
 
     previousNoseX = nose.x;
 
-    // ======================
+    // ==========================
     // EYE TRACKING
-    // ======================
+    // ==========================
 
-    const leftEye = landmarks[33];
+    const leftEyeLeft = landmarks[33];
+
+    const leftEyeRight = landmarks[133];
 
     const leftIris = landmarks[468];
 
-  if (leftIris.x < leftEye.x - 0.01) {
+    // Eye width
+    const eyeWidth =
+      leftEyeRight.x - leftEyeLeft.x;
 
-  console.log("👀 Looking Left");
+    // Iris relative position
+    const irisPosition =
+      (leftIris.x - leftEyeLeft.x) /
+      eyeWidth;
 
-  setWarning("Looking Left");
+    console.log(
+      "Eye Position:",
+      irisPosition
+    );
 
-  socket.emit("violation", {
-    roomId,
-    type: "Looking Left",
-    userId
-  });
+    const now = Date.now();
 
-}
+    // ==========================
+    // LOOKING LEFT
+    // ==========================
+
+    if (
+      irisPosition < 0.30 &&
+      now - lastEyeViolation > 3000
+    ) {
+
+      lastEyeViolation = now;
+
+      setWarning("Looking Left");
+
+      socket.emit("track-time", {
+        roomId,
+        username,
+        userId,
+        type: "looking_left",
+        duration: 0.5,
+      });
+
+    }
+
+    // ==========================
+    // LOOKING RIGHT
+    // ==========================
+
+    else if (
+      irisPosition > 0.70 &&
+      now - lastEyeViolation > 3000
+    ) {
+
+      lastEyeViolation = now;
+
+      setWarning("Looking Right");
+
+      socket.emit("track-time", {
+        roomId,
+        username,
+        userId,
+        type: "looking_right",
+        duration: 0.5,
+      });
+
+    }
+
+    else {
+
+      setWarning("");
+
+    }
 
   });
 
@@ -185,14 +248,20 @@ const isCreator = creator === username;
           image: localVideoRef.current,
         });
 
-      } catch (err) {
+      }
+
+      catch (err) {
 
         console.log(err);
 
-      } finally {
+      }
+
+      finally {
 
         isProcessing = false;
+
       }
+
     }
 
   }, 500);
@@ -203,7 +272,14 @@ const isCreator = creator === username;
 
   };
 
-}, [status, callType]);
+}, [
+  status,
+  callType,
+  roomId,
+  username,
+  userId,
+  isCreator,
+]);
 
   // Hardware Isolation
   useEffect(() => {

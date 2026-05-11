@@ -299,18 +299,38 @@ socketRef.current?.on("user-tab-active", ({ message }) => {
 // ================= AI VIOLATIONS =================
 socketRef.current?.off("violation-alert");
 
-socketRef.current?.on("violation-alert", (data) => {
+socketRef.current?.on(
+  "violation-alert",
+  (data) => {
 
-  console.log("⚠️ ADMIN WARNING:", data);
+    const messages: Record<string, string> = {
 
-toast.error(
-  `${data.username} → ${data.type}`,
-  {
-    id: `${data.username}-${data.type}`,
+      looking_left: "Looking Left",
+
+      looking_right: "Looking Right",
+
+      head_movement: "Head Movement",
+
+      no_face_detected: "No Face",
+
+      tab_switch: "Tab Switched",
+
+      multiple_faces: "Multiple Faces",
+
+      looked_away: "Looked Away",
+
+    };
+
+    toast.error(
+
+      `${data.username} → ${
+        messages[data.type] || data.type
+      }`
+
+    );
+
   }
 );
-
-});
 
 
 // ================= CURSOR =================
