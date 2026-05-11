@@ -4,6 +4,8 @@ import ParticleBackground from './components/ParticleBackground';
 import HomePage from './pages/HomePage';
 import LessonPage from './pages/LessonPage';
 import CodePage from './pages/CodePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import Navigation from './components/Navigation';
 
 
@@ -13,12 +15,14 @@ function App() {
       <div className="min-h-screen bg-[#0a0a0a] text-white">
         <ParticleBackground />
         <Navigation />
-        
+
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/lessons" element={<LessonPage />} />
           <Route path="/code" element={<CodePage />} />
           <Route path="/code/:roomId" element={<CodePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
         </Routes>
       </div>
     </BrowserRouter>

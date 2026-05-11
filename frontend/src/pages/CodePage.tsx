@@ -430,27 +430,53 @@ const handleVisibilityChange = () => {
     });
   };
 
- const handleShare = async () => {
-  const link = `${window.location.origin}/?room=${roomId}`;
+
+  /// Redirect to join page
+//  const handleShare = async () => {
+//   const link = `${window.location.origin}/?room=${roomId}`;
+
+//   try {
+//     if (navigator.share) {
+//       await navigator.share({
+//         title: "Join Room",
+//         text: "Join Abinash coding room 🚀",
+//         url: link, 
+//       });
+//     } else {
+//       await navigator.clipboard.writeText(link);
+//       setCopied(true);
+//       setTimeout(() => setCopied(false), 2000);
+//       alert("Link copied! You can paste it anywhere.");
+//     }
+//   } catch (error) {
+//     console.log("Share cancelled or failed", error);
+//   }
+// };
+
+
+const handleShare = async () => {
+  const link = `${window.location.origin}/register?room=${roomId}`;
 
   try {
     if (navigator.share) {
       await navigator.share({
         title: "Join Room",
         text: "Join Abinash coding room 🚀",
-        url: link, 
+        url: link,
       });
     } else {
       await navigator.clipboard.writeText(link);
+
       setCopied(true);
+
       setTimeout(() => setCopied(false), 2000);
+
       alert("Link copied! You can paste it anywhere.");
     }
   } catch (error) {
     console.log("Share cancelled or failed", error);
   }
 };
-
 
   const sendMessage = () => {
     if (!chatInput.trim()) return;
