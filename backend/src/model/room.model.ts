@@ -10,13 +10,13 @@ createdBy: {
 },
 approvedUser:[
   {
-     socketId: String,
+     userId: String,
       name: String,
   }
 ],
   pendingUsers: [
     {
-      socketId: String,
+      userId: String,
       name: String,
     }
   ]

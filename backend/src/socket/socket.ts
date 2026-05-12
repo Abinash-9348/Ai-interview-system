@@ -1,6 +1,7 @@
 import { Server, Socket } from "socket.io";
 import { Message } from "../model/meessage.model.ts";
 import { Room } from "../model/room.model.ts";
+import { Violation } from "../model/violation.model.ts";
 
 type User = {
   socketId: string;
@@ -267,6 +268,7 @@ socket.on("leave-room", (_, callback) => {
 // ================= TAB EVENTS (NO DB) =================
 socket.on("tab-inactive", ({ roomId, user }) => {
   const adminSocketId = adminSockets[roomId];
+  
 
   if (adminSocketId) {
     io.to(adminSocketId).emit("user-tab-inactive", {
@@ -288,26 +290,155 @@ socket.on("tab-active", ({ roomId, user }) => {
 });
 
 // ================= AI PROCTORING VIOLATIONS =================
-socket.on("violation", ({ roomId, type, username }) => {
 
-   console.log("⚠️ VIOLATION:", type);
+// ================= AI PROCTORING VIOLATIONS =================
 
-   const adminSocketId = adminSockets[roomId];
+socket.on(
+  "violation",
+  async ({ roomId, type, username, userId }) => {
 
-   if(adminSocketId){
+    try {
 
-      io.to(adminSocketId).emit(
-         "violation-alert",
-         {
+      console.log("⚠️ VIOLATION:", type);
+
+      // SAVE TO DB
+      const violation = await Violation.create({
+        roomId,
+        userId,
+        username,
+        type,
+      });
+
+      // FIND ADMIN
+      const adminSocketId =
+        adminSockets[roomId];
+
+      // SEND REALTIME ALERT
+      if (adminSocketId) {
+
+        io.to(adminSocketId).emit(
+          "violation-alert",
+          violation
+        );
+
+      }
+
+    } catch (error) {
+
+      console.log(error);
+
+    }
+
+  }
+);
+
+// ==============================
+// TRACK TIME SOCKET
+// ==============================
+
+socket.on(
+  "track-time",
+  async ({
+    roomId,
+    userId,
+    username,
+    type,
+    duration,
+  }) => {
+
+    try {
+
+      const updateFields: any = {};
+
+      // LOOKING LEFT
+      if (type === "looking_left") {
+
+        updateFields.$inc = {
+          lookingLeftTime: duration,
+        };
+
+      }
+
+      // LOOKING RIGHT
+      else if (type === "looking_right") {
+
+        updateFields.$inc = {
+          lookingRightTime: duration,
+        };
+
+      }
+
+      // HEAD MOVEMENT
+      else if (type === "head_movement") {
+
+        updateFields.$inc = {
+          headMovementTime: duration,
+        };
+
+      }
+
+      // MULTIPLE FACE
+      else if (type === "multiple_faces") {
+
+        updateFields.$inc = {
+          multipleFaceTime: duration,
+        };
+
+      }
+
+      // NO FACE
+      else if (type === "no_face_detected") {
+
+        updateFields.$inc = {
+          noFaceTime: duration,
+        };
+
+      }
+
+    
+        await Violation.findOneAndUpdate(
+
+          {
             roomId,
-            type,
-            username
-         }
-      );
+            userId,
+          },
 
-   }
+          {
+            username,
+            ...updateFields,
+          },
 
-});
+          {
+            upsert: true,
+            returnDocument: "after",
+          }
+
+        );
+
+      // ADMIN ALERT
+      const adminSocketId =
+        adminSockets[roomId];
+
+      if (adminSocketId) {
+
+        io.to(adminSocketId).emit(
+          "violation-alert",
+          {
+    username,
+    type,
+  }
+        );
+
+      }
+
+    } catch (error) {
+
+      console.log(error);
+
+    }
+
+  }
+);
  //video call
    socket.on("video-offer", ({ roomId, offer, from, type }) => {
       console.log("📥 Server forwarding video-offer", roomId, type);
