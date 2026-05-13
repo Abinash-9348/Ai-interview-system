@@ -1,5 +1,3 @@
-import { Message } from './../model/meessage.model';
-import { genAcessToken } from './../services/user.services';
 import { Request,Response } from "express"
 import { forgotPasswordServices, loginServices, regenAcessTokenservices, registerUser, resetpasswordservices } from "../services/user.services.ts"
 export const registerUserontroller = async(req:Request,res:Response)=>{

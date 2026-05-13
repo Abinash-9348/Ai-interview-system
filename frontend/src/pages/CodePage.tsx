@@ -166,11 +166,12 @@ useEffect(() => {
     setTimeout(() => {
       socket.emit("join", {
         roomId,
-        user: {
-          id: userId,
-          name: username,
-          color: "#ff4d4f",
-        },
+         color: "#ff4d4f"
+        // user: {
+        //   id: userId,
+        //   name: username,
+        //   color: "#ff4d4f",
+        // },
       });
     }, 1000);
   });
@@ -196,11 +197,7 @@ useEffect(() => {
 
     socket.emit("approved-join", {
       roomId,
-      user: {
-        id: userId,
-        name: username,
-        color: "#ff4d4f",
-      },
+      color: "#ff4d4f",
     });
   });
 
@@ -380,7 +377,6 @@ const handleVisibilityChange = () => {
         : "tab-active",
       {
         roomId,
-        user: { name: username },
       }
     );
   }, 100);
@@ -420,10 +416,10 @@ const handleVisibilityChange = () => {
         left: pos.left,
         height: pos.height,
       },
-      user: {
-        name: username,
-        color: "#ff4d4f",
-      },
+      // user: {
+      //   name: username,
+      //   color: "#ff4d4f",
+      // },
     });
   };
 
@@ -472,22 +468,42 @@ const handleVisibilityChange = () => {
 };
 
 
-  const sendMessage = () => {
-    if (!chatInput.trim()) return;
+const sendMessage = () => {
 
-    const msgData = {
+   if (!chatInput.trim()) return;
+
+   const msgData = {
+
       roomId,
-      message: chatInput,
-      user: {
-        name: displayName,
-        color: "#ff4d4f",
-      },
-    };
-    setMessages((prev) => [...prev, msgData]);
-    socketRef.current?.emit("send-message", msgData);
 
-    setChatInput("");
-  };
+      message: chatInput,
+
+      // local ui only
+      user: {
+         name: displayName,
+         color: "#ff4d4f",
+      },
+
+   };
+
+   // optimistic ui
+   setMessages((prev) => [
+      ...prev,
+      msgData,
+   ]);
+
+   // secure backend emit
+   socketRef.current?.emit(
+      "send-message",
+      {
+         roomId,
+         message: chatInput,
+      }
+   );
+
+   setChatInput("");
+
+};
 
   // const handleLockRoom = async () => {
   //   try {

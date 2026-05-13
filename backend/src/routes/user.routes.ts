@@ -6,6 +6,6 @@ export const userRouter = express.Router()
 
 userRouter.post("/create",registerUserontroller)
 userRouter.post("/login",loginUserController)
-userRouter.post("/regenacesoken",regenAcessTokenController)
+userRouter.post("/regentoken",regenAcessTokenController)
 userRouter.post("/forgotpassword",forgotpasswordController)
 userRouter.post("/resetpasssword",resetpassword)

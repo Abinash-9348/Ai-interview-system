@@ -9,6 +9,7 @@ export const initsocket = () => {
   }
 
   socket = io("http://localhost:8000", {
+    withCredentials: true,
     transports: ["websocket"], 
     reconnection: false, // ❗ stop retry spam
     forceNew: false,

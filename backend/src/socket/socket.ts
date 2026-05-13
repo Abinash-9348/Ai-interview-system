@@ -2,7 +2,13 @@ import { Server, Socket } from "socket.io";
 import { Message } from "../model/meessage.model.ts";
 import { Room } from "../model/room.model.ts";
 import { Violation } from "../model/violation.model.ts";
+import jwt from 'jsonwebtoken'
 
+interface JwtPayload {
+   id:string
+   name:string
+   role:string
+}
 type User = {
   socketId: string;
   id: string;
@@ -13,6 +19,8 @@ type User = {
 const users: Record<string, User[]> = {};
 const pendingUsers: Record<string, User[]> = {};
 const adminSockets: Record<string, string> = {};
+
+
 
 // 🔥 SAFE ADD USER (NO DUPLICATE)
 const addUser = (roomId: string, socket: Socket, user: any) => {
@@ -32,16 +40,52 @@ const addUser = (roomId: string, socket: Socket, user: any) => {
 };
 
 export const initSocket = (io: Server) => {
+
+io.use((
+   socket: Socket,
+   next
+) => {
+
+   try {
+
+      const token =
+         socket.handshake.auth.token
+
+      if (!token) {
+
+         return next(
+            new Error("Unauthorized")
+         )
+
+      }
+
+      const decoded = jwt.verify(
+         token,
+         process.env.ACCESS_SECRET as string
+      )
+
+      socket.data.user = decoded
+
+      next()
+
+   } catch (error) {
+
+      next(
+         new Error("Invalid token")
+      )
+
+   }
+
+})
   io.on("connection", (socket: Socket) => {
 
     // ================= JOIN =================
-    socket.on("join", async ({ roomId, user }) => {
-      console.log("🔥 JOIN EVENT HIT", roomId, user);
+    socket.on("join", async ({ roomId,color }) => {
 
-      const room = await Room.findOne({ roomId });
-
+      const room = await Room.findOne({ roomId  });
+      const user = socket.data.user as JwtPayload
       socket.data.roomId = roomId;
-      socket.data.user = user; 
+  
 
       if (!room || !room.createdBy) return;
 
@@ -86,7 +130,7 @@ export const initSocket = (io: Server) => {
           socketId: socket.id,
           id: user.id,
           name: user.name,
-          color: user.color,
+          color: color,
         });
       }
 
@@ -97,7 +141,7 @@ export const initSocket = (io: Server) => {
           socketId: socket.id,
           id: user.id,
           name: user.name,
-          color: user.color,
+          color: color,
         });
       }
 
@@ -105,48 +149,89 @@ export const initSocket = (io: Server) => {
     });
 
     // ================= APPROVE =================
-    socket.on("approve-user", ({ socketId, roomId }) => {
-      io.to(socketId).emit("approved", { roomId });
-    });
+  socket.on(
+  "approve-user",
+  ({ socketId, roomId }) => {
+
+    const user =
+      socket.data.user as JwtPayload;
+
+    // only admin can approve
+    if (user.role !== "admin") {
+      return;
+    }
+
+    io.to(socketId).emit(
+      "approved",
+      { roomId }
+    );
+
+  }
+);
 
     // ================= REJECT =================
     socket.on("reject-user", ({ socketId, roomId }) => {
-      io.to(socketId).emit("rejected");
-
-      if (pendingUsers[roomId]) {
-        pendingUsers[roomId] = pendingUsers[roomId].filter(
-          (u) => u.socketId !== socketId
-        );
+      const user=socket.data.user as JwtPayload
+      if(user.role != "admin"){
+        return
       }
+
+      io.to(socketId).emit("rejected",{roomId});
+
     });
 
     // ================= APPROVED JOIN =================
-    socket.on("approved-join", ({ roomId, user }) => {
-      const pending = pendingUsers[roomId]?.find(
+   socket.on(
+  "approved-join",
+  ({ roomId, color }) => {
+
+    const user =
+      socket.data.user as JwtPayload;
+
+    const pending =
+      pendingUsers[roomId]?.find(
         (u) => u.id === user.id
       );
 
-      if (!pending) return;
+    if (!pending) return;
 
-      pendingUsers[roomId] = pendingUsers[roomId].filter(
+    pendingUsers[roomId] =
+      pendingUsers[roomId].filter(
         (u) => u.id !== user.id
       );
 
-      socket.join(roomId);
+    socket.join(roomId);
 
-      addUser(roomId, socket, user);
-
-      io.to(roomId).emit("active-users", users[roomId]);
-
-      io.to(roomId).emit("user-joined", {
-        message: `${user.name} joined the room`,
-      });
-
-      console.log("✅ USER JOINED:", user.name);
+    addUser(roomId, socket, {
+      ...user,
+      color,
     });
+
+    io.to(roomId).emit(
+      "active-users",
+      users[roomId]
+    );
+
+    io.to(roomId).emit(
+      "user-joined",
+      {
+        message:
+          `${user.name} joined the room`,
+      }
+    );
+
+    console.log(
+      "USER JOINED:",
+      user.name
+    );
+
+  }
+);
 
     // ================= CODE =================
     socket.on("code-change", async ({ roomId, code }) => {
+      const user=socket.data.user as JwtPayload
+      if(!user)return
       await Room.findOneAndUpdate(
         { roomId },
         { code },
@@ -237,7 +322,7 @@ socket.on("leave-room", (_, callback) => {
   console.log("🚪 manual leave");
 
   const roomId = socket.data.roomId;
-  const user = socket.data.user;
+  const user = socket.data.user as JwtPayload;
 
   if (!roomId) {
     callback && callback();
@@ -347,6 +432,8 @@ socket.on(
   }) => {
 
     try {
+       const user =
+        socket.data.user as JwtPayload;
 
       const updateFields: any = {};
 
@@ -440,22 +527,95 @@ socket.on(
   }
 );
  //video call
-   socket.on("video-offer", ({ roomId, offer, from, type }) => {
-      console.log("📥 Server forwarding video-offer", roomId, type);
-      socket.to(roomId).emit("video-offer", { offer, from, type });
-   });
+socket.on(
+  "video-offer",
+  ({ roomId, offer, type }) => {
 
-   socket.on("video-answer", ({ roomId, answer }) => {
-      socket.to(roomId).emit("video-answer", { answer });
-   });
+    const user =
+      socket.data.user as JwtPayload;
 
-   socket.on("video-ice-candidate", ({ roomId, candidate }) => {
-      socket.to(roomId).emit("video-ice-candidate", { candidate });
-   });
+    console.log(
+      "📥 Server forwarding video-offer",
+      roomId,
+      type
+    );
 
-   socket.on("call-ended", ({ roomId }) => {
-      socket.to(roomId).emit("call-ended");
-   });
-   
+    socket.to(roomId).emit(
+      "video-offer",
+      {
+        offer,
+        from: {
+          id: user.id,
+          name: user.name,
+          role: user.role,
+        },
+        type,
+      }
+    );
+
+  }
+);
+
+socket.on(
+  "video-answer",
+  ({ roomId, answer }) => {
+
+    const user =
+      socket.data.user as JwtPayload;
+
+    socket.to(roomId).emit(
+      "video-answer",
+      {
+        answer,
+        from: {
+          id: user.id,
+          name: user.name,
+        },
+      }
+    );
+
+  }
+);
+
+socket.on(
+  "video-ice-candidate",
+  ({ roomId, candidate }) => {
+
+    const user =
+      socket.data.user as JwtPayload;
+
+    socket.to(roomId).emit(
+      "video-ice-candidate",
+      {
+        candidate,
+        from: {
+          id: user.id,
+          name: user.name,
+        },
+      }
+    );
+
+  }
+);
+
+socket.on(
+  "call-ended",
+  ({ roomId }) => {
+
+    const user =
+      socket.data.user as JwtPayload;
+
+    socket.to(roomId).emit(
+      "call-ended",
+      {
+        user: {
+          id: user.id,
+          name: user.name,
+        },
+      }
+    );
+
+  }
+);
   });
 };

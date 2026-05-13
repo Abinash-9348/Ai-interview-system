@@ -7,6 +7,9 @@ new mongoose.Schema({
     type: String,
     required: true,
   },
+  type: {
+    type: String,
+  },
 
   userId: {
     type: String,

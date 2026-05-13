@@ -13,8 +13,6 @@ interface Props {
   onClose: () => void;
   socket: Socket;
   roomId: string;
-  username: string;
-  userId: string;
   incomingCall: { offer: any; from: string; type: "audio" | "video" } | null;
   initialIceCandidates: any[];
   preSelectedType: "audio" | "video";
@@ -91,8 +89,6 @@ useEffect(() => {
 
       socket.emit("track-time", {
         roomId,
-        userId,
-        username,
         type: "no_face_detected",
         duration: 0.5,
       });
@@ -110,8 +106,6 @@ useEffect(() => {
 
       socket.emit("track-time", {
         roomId,
-        userId,
-        username,
         type: "multiple_faces",
         duration: 0.5,
       });
@@ -139,8 +133,6 @@ useEffect(() => {
 
         socket.emit("track-time", {
           roomId,
-          userId,
-          username,
           type: "head_movement",
           duration: 0.5,
         });
@@ -192,8 +184,6 @@ useEffect(() => {
 
       socket.emit("track-time", {
         roomId,
-        username,
-        userId,
         type: "looking_left",
         duration: 0.5,
       });
@@ -215,8 +205,6 @@ useEffect(() => {
 
       socket.emit("track-time", {
         roomId,
-        username,
-        userId,
         type: "looking_right",
         duration: 0.5,
       });
