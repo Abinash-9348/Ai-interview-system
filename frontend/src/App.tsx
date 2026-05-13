@@ -7,6 +7,8 @@ import CodePage from './pages/CodePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Navigation from './components/Navigation';
+import ForgotPasswordPage from './pages/ForgotPassword';
+import ResetPasswordPage from './pages/ResetPassord';
 
 
 function App() {
@@ -17,12 +19,15 @@ function App() {
         <Navigation />
 
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<LoginPage />} />
+          <Route path="/home-page" element={<HomePage />} />
           <Route path="/lessons" element={<LessonPage />} />
           <Route path="/code" element={<CodePage />} />
           <Route path="/code/:roomId" element={<CodePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Routes>
       </div>
     </BrowserRouter>

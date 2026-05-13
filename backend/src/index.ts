@@ -1,15 +1,16 @@
+import dotenv from 'dotenv'
+dotenv.config()
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import { db_connect } from "./config/db.ts";
 import { initSocket } from "./socket/socket.ts";
-import dotenv from 'dotenv'
 import { roomRouter } from "./routes/room.routes.ts";
 import cors from 'cors'
 import { codeexecuteRouter } from "./routes/codeexcute.routes.ts";
 import { limiter } from "./utils/ratelimit.ts";
 import { userRouter } from "./routes/user.routes.ts";
-dotenv.config()
+import cookieParser from "cookie-parser"
 
 
 const app = express();
@@ -19,6 +20,7 @@ app.use(cors({
   methods: ["GET", "POST"]
 }));
 app.use(express.json())
+app.use(cookieParser())
 
 
 app.get("/", (_req, res) => {

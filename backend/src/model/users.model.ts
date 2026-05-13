@@ -29,7 +29,13 @@ const userSchema = new mongoose.Schema({
     type:String,
     enum:["candidate","recruiter"],
     default:"candidate"
-  }
+  },
+  refreshToken:{type:String  ,default:null},
+  otp:{type:String,default:null},
+otpExpire: {
+   type: Date,
+   default:null
+}
 
 },{timestamps:true})
 
