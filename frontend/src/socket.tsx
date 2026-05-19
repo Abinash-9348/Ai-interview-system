@@ -3,19 +3,30 @@ import { io, Socket } from "socket.io-client";
 let socket: Socket | null = null;
 
 export const initsocket = () => {
+  if (socket?.connected) {
+    return socket;
+  }
+
   if (socket) {
-    console.log("⚠️ USING EXISTING SOCKET");
+    socket.connect();
     return socket;
   }
 
   socket = io("http://localhost:8000", {
     withCredentials: true,
-    transports: ["websocket"], 
-    reconnection: false, // ❗ stop retry spam
-    forceNew: false,
+    transports: ["websocket"],
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
   });
 
-  console.log("✅ NEW SOCKET CREATED");
+  socket.on("connect", () => {
+    console.log("✅ Socket Connected:", socket?.id);
+  });
+
+  socket.on("connect_error", (err) => {
+    console.error("❌ Socket Connection Error:", err.message);
+  });
 
   return socket;
-};
+};

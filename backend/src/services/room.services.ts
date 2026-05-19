@@ -1,5 +1,6 @@
 import { Room } from "../model/room.model.ts";
 import { v4 as uuidv4 } from "uuid";
+import { User } from "../model/users.model.ts";
 
 export async function createRoomServices(data: any) {
   const {language,user}=data
@@ -11,6 +12,7 @@ export async function createRoomServices(data: any) {
     exists = await Room.findOne({ roomId });
   }
 
+
   const room = await Room.create({
     roomId,
     language:language,
@@ -21,6 +23,13 @@ export async function createRoomServices(data: any) {
       userId: user.id
     }
   });
+
+    await User.findByIdAndUpdate(
+  user.id,
+  {
+    role:"recruiter"
+  }
+)
 
   return room;
 }

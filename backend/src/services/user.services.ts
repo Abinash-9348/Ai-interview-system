@@ -25,8 +25,9 @@ export const loginServices=async(email:string,password:string)=>{
     if(!isPassword){
          throw new Error("invalid credential")
     }
-    const acesstoken = await generateAcessToken(isEmail.id,isEmail.role)
-    const refreshToken = await genrateRefreshToken(isEmail.id,isEmail.role)
+    const acesstoken = await generateAcessToken(isEmail.id,isEmail.role,isEmail.name)
+    console.log(acesstoken)
+    const refreshToken = await genrateRefreshToken(isEmail.id,isEmail.role,isEmail.name)
     isEmail.refreshToken=refreshToken
     isEmail.save()
     return {
@@ -46,7 +47,8 @@ export const regenAcessTokenservices = async(refreshToken:string)=>{
     }
    const newAccessToken = generateAcessToken(
       user._id.toString(),
-      user.role
+      user.role,
+      user.name
    )
    return {
     acesstoken:newAccessToken

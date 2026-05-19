@@ -90,8 +90,6 @@ export default function CodePage() {
   const [cursors, setCursors] = useState<any[]>([]);
   const [user, setUser] = useState<UserType[]>([]);
   // const chatEndRef = useRef<HTMLDivElement | null>(null);
- const creator = localStorage.getItem(`room_creator_${roomId}`);
-const isCreator = creator === username;
   const isLeaving = useRef(false);
   const isSocketInit = useRef(false);
   const editorRef = useRef<any>(null);
@@ -141,260 +139,173 @@ type User = {
   //   };
 
   //   fetchStatus();
-  // }, [roomId]);
+  // }, [roomId]);  useEffect(() => {
+    if (!roomId) return;
 
-useEffect(() => {
-  setUser([]);
-  setCursors([]);
-  setMessages([]);
+    const socket = initsocket();
+    socketRef.current = socket;
 
-  if (!isCollab) return;
-
-  if (isSocketInit.current) return;
-
-  const socket = initsocket();
-  if (!socket) return;
-
-  socketRef.current = socket;
-  isSocketInit.current = true;
-
-  // ================= CONNECT =================
-  socket.on("connect", () => {
-    console.log("✅CONNECTED:", socket.id);
-
-    // ⏳ Delay for Render backend wakeup
-    setTimeout(() => {
-      socket.emit("join", {
-        roomId,
-         color: "#ff4d4f"
-        // user: {
-        //   id: userId,
-        //   name: username,
-        //   color: "#ff4d4f",
-        // },
-      });
-    }, 1000);
-  });
-
-  // ================= ADMIN =================
-  socket.on("you-are-admin", () => {
-    console.log("👑 I AM ADMIN");
-    setIsAdmin(true);
-  });
-
-  // ================= USERS =================
-  socket.on("active-users", (clients) => {
-    setUser(clients);
-  });
-
-  // ================= WAITING =================
-  socket.on("waiting-approval", () => {
-    setIsWaiting(true);
-  });
-
-  socket.on("approved", ({ roomId }) => {
-    setIsWaiting(false);
-
-    socket.emit("approved-join", {
-      roomId,
-      color: "#ff4d4f",
-    });
-  });
-
-  socket.on("rejected", () => {
-    setIsWaiting(false);
-    toast.error("Rejected by admin ❌");
-      navigate("/");
-  });
-
-  socket.on("user-waiting", (user) => {
-    console.log("🔥 WAITING USER:", user);
-
-    setWaitingUsers((prev) => {
-      const exists = prev.find((u) => u.id === user.id);
-      if (exists) return prev;
-      return [...prev, user];
-    });
-  });
-
-  // ================= VIDEO CALL SIGNALING =================
-  socket.on("video-offer", ({ offer, from, type }) => {
-    console.log(`📥 Incoming ${type} offer from:`, from);
-    setIncomingCall({ offer, from, type });
-    setPendingIceCandidates([]); 
-    setActiveCallType(type);
-  });
-
-  socket.on("video-ice-candidate", ({ candidate }) => {
-    if (!activeCallType) {
-      setPendingIceCandidates((prev) => [...prev, candidate]);
-    }
-  });
-
-  // ================= JOIN =================
-  socket.on("user-joined", ({ message }) => {
-    toast.success(message);
-  });
-
-  // ================= CODE =================
-  socket.on("code-change", ({ code }) => {
-    const editor = editorRef.current;
-    if (!editor) return;
-
-    const position = editor.getPosition();
-    setCode(code);
-
-    setTimeout(() => {
-      if (position) editor.setPosition(position);
-    }, 0);
-  });
-
-  socket.on("code-update", (code) => {
-    setCode(code);
-  });
-
-  // ================= CHAT =================
-  socket.emit("load-messages", roomId);
-
-  socket.on("previous-messages", (msgs) => {
-    setMessages((prev) => [...prev, ...msgs]);
-  });
-
-  socket.on("receive-message", (newMessage) => {
-    if (newMessage.user.name === displayName) return;
-    setMessages((prev) => [...prev, newMessage]);
-  });
-
-  // ================= LEAVE =================
- // ================= USER LEFT =================
-socketRef.current?.off("USER_LEFT");
-socketRef.current?.on("USER_LEFT", ({ username }) => {
-  console.log("🔥 USER LEFT:", username);
-
-  toast.success(`${username} left`);
-
-  setCursors((prev) =>
-    prev.filter((c) => c.name !== username)
-  );
-});
-
-
-// ================= TAB EVENTS =================
-socketRef.current?.off("user-tab-inactive");
-socketRef.current?.on("user-tab-inactive", ({ message }) => {
-  console.log("⚠️ TAB INACTIVE:", message);
-  toast(message, { icon: "⚠️" });
-});
-
-socketRef.current?.off("user-tab-active");
-socketRef.current?.on("user-tab-active", ({ message }) => {
-  console.log("✅ TAB ACTIVE:", message);
-  toast.success(message);
-});
-
-
-// ================= AI VIOLATIONS =================
-socketRef.current?.off("violation-alert");
-
-socketRef.current?.on(
-  "violation-alert",
-  (data) => {
-
-    const messages: Record<string, string> = {
-
-      looking_left: "Looking Left",
-
-      looking_right: "Looking Right",
-
-      head_movement: "Head Movement",
-
-      no_face_detected: "No Face",
-
-      tab_switch: "Tab Switched",
-
-      multiple_faces: "Multiple Faces",
-
-      looked_away: "Looked Away",
-
+    const onConnect = () => {
+      console.log("✅ Socket Connected");
+      socket.emit(ACTION.JOIN, { roomId, color: "#ff4d4f" });
     };
 
-    toast.error(
+    const onAdminStatus = () => {
+      console.log("👑 I AM ADMIN");
+      setIsAdmin(true);
+    };
 
-      `${data.username} → ${
-        messages[data.type] || data.type
-      }`
+    const onActiveUsers = (clients: UserType[]) => {
+      console.log("ACTIVE USERS:", clients);
+      setUser(clients);
+    };
 
-    );
+    const onWaitingApproval = () => {
+      setIsWaiting(true);
+    };
 
-  }
-);
+    const onApproved = ({ roomId }: { roomId: string }) => {
+      console.log("✅ APPROVED BY ADMIN");
+      setIsWaiting(false);
+      socket.emit(ACTION.APPROVED_JOIN, { roomId, color: "#ff4d4f" });
+    };
 
+    const onRejected = () => {
+      setIsWaiting(false);
+      toast.error("Rejected by admin ❌");
+      navigate("/");
+    };
 
-// ================= CURSOR =================
-// ================= CURSOR =================
-socketRef.current?.off("cursor-update");
+    const onUserWaiting = (user: User) => {
+      console.log("🔥 USER WAITING:", user);
+      setWaitingUsers((prev) => {
+        const exists = prev.find((u) => u.id === user.id);
+        if (exists) return prev;
+        return [...prev, user];
+      });
+    };
 
-socketRef.current?.on("cursor-update", ({ position, user }) => {
-  const socket = socketRef.current;
-  if (!socket) return;
+    const onUserJoined = ({ message }: { message: string }) => {
+      toast.success(message);
+    };
 
-  if (user.socketId === socket.id) return;
+    const onCodeUpdate = (code: string) => {
+      setCode(code);
+    };
 
-  setCursors((prev) => {
-    const filtered = prev.filter(
-      (c) => c.socketId !== user.socketId
-    );
+    const onReceiveMessage = (newMessage: MessageType) => {
+      if (newMessage.user.name === displayName) return;
+      setMessages((prev) => [...prev, newMessage]);
+    };
 
-    return [
-      ...filtered,
-      {
-        top: position.top,
-        left: position.left,
-        height: position.height,
-        name: user?.name || "User",
-        color: user?.color || "#fff",
-        socketId: user.socketId,
-      },
-    ];
-  });
-});
+    const onUserLeft = ({ username }: { username: string }) => {
+      toast.success(`${username} left`);
+      setCursors((prev) => prev.filter((c) => c.name !== username));
+    };
 
- 
-const handleVisibilityChange = () => {
-  const socket = socketRef.current;
+    const onTabInactive = ({ message }: { message: string }) => {
+      toast(message, { icon: "⚠️" });
+    };
 
-  if (!socket || !socket.connected) return;
+    const onTabActive = ({ message }: { message: string }) => {
+      toast.success(message);
+    };
 
-  if (document.visibilityState === lastStateRef.current) return;
-  lastStateRef.current = document.visibilityState;
+    const onViolationAlert = (data: any) => {
+      const messages: Record<string, string> = {
+        looking_left: "Looking Left",
+        looking_right: "Looking Right",
+        head_movement: "Head Movement",
+        no_face_detected: "No Face",
+        tab_switch: "Tab Switched",
+        multiple_faces: "Multiple Faces",
+        looked_away: "Looked Away",
+      };
+      toast.error(`${data.username} → ${messages[data.type] || data.type}`);
+    };
 
-  if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    const onCursorUpdate = ({ position, user }: any) => {
+      if (user.socketId === socket.id) return;
+      setCursors((prev) => {
+        const filtered = prev.filter((c) => c.socketId !== user.socketId);
+        return [
+          ...filtered,
+          {
+            top: position.top,
+            left: position.left,
+            height: position.height,
+            name: user?.name || "User",
+            color: user?.color || "#fff",
+            socketId: user.socketId,
+          },
+        ];
+      });
+    };
 
-  timeoutRef.current = setTimeout(() => {
-    socket.emit(
-      document.visibilityState === "hidden"
-        ? "tab-inactive"
-        : "tab-active",
-      {
-        roomId,
-      }
-    );
-  }, 100);
-};
+    const onVideoOffer = ({ offer, from, type }: any) => {
+      console.log(`📥 Incoming ${type} offer from:`, from.name);
+      setIncomingCall({ offer, from: from.socketId, type }); // Save socketId as from
+      setPendingIceCandidates([]); 
+      setActiveCallType(type);
+    };
 
-  document.addEventListener("visibilitychange", handleVisibilityChange);
+    // Attach listeners
+    socket.on("connect", onConnect);
+    socket.on("you-are-admin", onAdminStatus);
+    socket.on(ACTION.ACTIVE_USER, onActiveUsers);
+    socket.on("waiting-approval", onWaitingApproval);
+    socket.on(ACTION.APPROVED, onApproved);
+    socket.on(ACTION.REJECTED, onRejected);
+    socket.on(ACTION.USER_WAITING, onUserWaiting);
+    socket.on("user-joined", onUserJoined);
+    socket.on("code-update", onCodeUpdate);
+    socket.on("receive-message", onReceiveMessage);
+    socket.on("USER_LEFT", onUserLeft);
+    socket.on("user-tab-inactive", onTabInactive);
+    socket.on("user-tab-active", onTabActive);
+    socket.on("violation-alert", onViolationAlert);
+    socket.on("cursor-update", onCursorUpdate);
+    socket.on("video-offer", onVideoOffer);
 
-  // ================= CLEANUP =================
-  return () => {
-    if (socketRef.current) {
-      socketRef.current.off(); 
-      // ❌ DO NOT disconnect
-    }
+    if (socket.connected) onConnect();
 
-    document.removeEventListener("visibilitychange", handleVisibilityChange);
-    isSocketInit.current = false;
-  };
-}, [roomId]);
+    // Tab visibility handling
+    const handleVisibilityChange = () => {
+      if (!socket.connected) return;
+      if (document.visibilityState === lastStateRef.current) return;
+      lastStateRef.current = document.visibilityState;
+
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        socket.emit(
+          document.visibilityState === "hidden" ? "tab-inactive" : "tab-active",
+          { roomId }
+        );
+      }, 100);
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      // Remove listeners
+      socket.off("connect", onConnect);
+      socket.off("you-are-admin", onAdminStatus);
+      socket.off(ACTION.ACTIVE_USER, onActiveUsers);
+      socket.off("waiting-approval", onWaitingApproval);
+      socket.off(ACTION.APPROVED, onApproved);
+      socket.off(ACTION.REJECTED, onRejected);
+      socket.off(ACTION.USER_WAITING, onUserWaiting);
+      socket.off("user-joined", onUserJoined);
+      socket.off("code-update", onCodeUpdate);
+      socket.off("receive-message", onReceiveMessage);
+      socket.off("USER_LEFT", onUserLeft);
+      socket.off("user-tab-inactive", onTabInactive);
+      socket.off("user-tab-active", onTabActive);
+      socket.off("violation-alert", onViolationAlert);
+      socket.off("cursor-update", onCursorUpdate);
+      socket.off("video-offer", onVideoOffer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [roomId]);
   // ================= CODE CHANGE =================
   const handleCodeChange = (value: string) => {
     setCode(value);
@@ -446,28 +357,53 @@ const handleVisibilityChange = () => {
     });
   };
 
- const handleShare = async () => {
-  const link = `${window.location.origin}/?room=${roomId}`;
+
+  /// Redirect to join page
+//  const handleShare = async () => {
+//   const link = `${window.location.origin}/?room=${roomId}`;
+
+//   try {
+//     if (navigator.share) {
+//       await navigator.share({
+//         title: "Join Room",
+//         text: "Join Abinash coding room 🚀",
+//         url: link, 
+//       });
+//     } else {
+//       await navigator.clipboard.writeText(link);
+//       setCopied(true);
+//       setTimeout(() => setCopied(false), 2000);
+//       alert("Link copied! You can paste it anywhere.");
+//     }
+//   } catch (error) {
+//     console.log("Share cancelled or failed", error);
+//   }
+// };
+
+
+const handleShare = async () => {
+  const link = `${window.location.origin}/register?room=${roomId}`;
 
   try {
     if (navigator.share) {
       await navigator.share({
         title: "Join Room",
         text: "Join Abinash coding room 🚀",
-        url: link, 
+        url: link,
       });
     } else {
       await navigator.clipboard.writeText(link);
+
       setCopied(true);
+
       setTimeout(() => setCopied(false), 2000);
+
       alert("Link copied! You can paste it anywhere.");
     }
   } catch (error) {
     console.log("Share cancelled or failed", error);
   }
 };
-
-
 const sendMessage = () => {
 
    if (!chatInput.trim()) return;
@@ -504,7 +440,6 @@ const sendMessage = () => {
    setChatInput("");
 
 };
-
   // const handleLockRoom = async () => {
   //   try {
   //     const response = await fetch("https://cloude-backend.onrender.com/room/locked", {
@@ -689,7 +624,7 @@ const sendMessage = () => {
               {theme === "vs-dark" ? "🌙 Dark" : "☀️ Light"}
             </button>
             {/* Dynamic Avatars (Replaced Person Icon) */}
-            {isCollab && user.length > 0 && (
+            {user.length > 0 && (
               <div className="flex items-center gap-2 pl-2">
                 <span className="text-[10px] font-black uppercase text-white/20 tracking-tighter mr-1">
                   Users
@@ -730,7 +665,7 @@ const sendMessage = () => {
             )}
             <div className="w-[1px] h-6 bg-white/10" />
             {/* Lockroom Action */}
-            {isCreator && (
+            {isAdmin && (
               <button
                 onClick={handleLockRoom}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-bold ${isLocked
@@ -743,7 +678,7 @@ const sendMessage = () => {
               </button>
             )}
             {/* Share/Invite Action */}
-            {isCreator && (
+            {isAdmin && (
               <button
                 onClick={handleShare}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-bold ${copied

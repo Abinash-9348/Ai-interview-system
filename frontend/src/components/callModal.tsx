@@ -284,22 +284,33 @@ useEffect(() => {
     };
   }, []);
 
-  const createPeer = (mode: "audio" | "video") => {
+  const createPeer = (mode: "audio" | "video", targetSocketId: string) => {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" }
+      ],
     });
 
     pc.onicecandidate = (event) => {
-      if (event.candidate) socket.emit("video-ice-candidate", { roomId, candidate: event.candidate });
+      if (event.candidate) {
+        socket.emit("video-ice-candidate", { 
+          roomId, 
+          candidate: event.candidate,
+          toSocketId: targetSocketId 
+        });
+      }
     };
 
     pc.ontrack = (event) => {
+      console.log("📥 Remote track received");
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
     };
 
     pc.onconnectionstatechange = () => {
+      console.log("🔗 Connection state:", pc.connectionState);
       if (pc.connectionState === "connected") setStatus("connected");
       else if (["disconnected", "failed"].includes(pc.connectionState)) handleEndCall();
     };
@@ -317,6 +328,7 @@ useEffect(() => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+
       if (mode === "video" && localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
@@ -330,29 +342,48 @@ useEffect(() => {
   const startCall = async (mode: "audio" | "video") => {
     setCallType(mode);
     setStatus("calling");
+    
+    // In a multi-user room, we'd need to pick a target. 
+    // For now, it broadcasts or targets the first other user.
+    // If incomingCall is null, we are the caller.
+    
     const stream = await getMedia(mode);
     if (!stream) return;
-    const pc = createPeer(mode);
+
+    const pc = createPeer(mode, ""); // If no target, it might broadcast (fallback)
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socket.emit("video-offer", { roomId, offer, from: userId, type: mode });
+    
+    socket.emit("video-offer", { roomId, offer, type: mode });
   };
 
   const acceptCall = async () => {
     if (!incomingCall) return;
     const mode = incomingCall.type;
+    const targetSocketId = incomingCall.from; // This is the caller's socketId
+
     setCallType(mode);
     setStatus("calling");
+    
     const stream = await getMedia(mode);
-    const pc = createPeer(mode);
-    if (stream) stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    const pc = createPeer(mode, targetSocketId);
+    
+    if (stream) {
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    }
+
     await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+    
+    // Add any pending candidates
     pendingCandidates.current.forEach((c) => pc.addIceCandidate(new RTCIceCandidate(c)));
     pendingCandidates.current = [];
+
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    socket.emit("video-answer", { roomId, answer });
+    
+    socket.emit("video-answer", { roomId, answer, toSocketId: targetSocketId });
   };
 
   const handleEndCall = () => {
@@ -371,20 +402,39 @@ useEffect(() => {
 
   useEffect(() => {
     if (!socket) return;
-    socket.on("video-answer", async ({ answer }) => {
-      if (peerRef.current) await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-    });
-    socket.on("video-ice-candidate", async ({ candidate }) => {
-      if (peerRef.current?.remoteDescription) await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-      else pendingCandidates.current.push(candidate);
-    });
-    socket.on("call-ended", handleEndCall);
+
+    const onVideoAnswer = async ({ answer, from }: any) => {
+      console.log("📥 Received video-answer from:", from.name);
+      if (peerRef.current) {
+        await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+      }
+    };
+
+    const onIceCandidate = async ({ candidate, from }: any) => {
+      console.log("📥 Received ICE candidate from:", from.name);
+      if (peerRef.current?.remoteDescription) {
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } else {
+        pendingCandidates.current.push(candidate);
+      }
+    };
+
+    const onCallEnded = () => {
+      console.log("📞 Call ended by remote");
+      handleEndCall();
+    };
+
+    socket.on("video-answer", onVideoAnswer);
+    socket.on("video-ice-candidate", onIceCandidate);
+    socket.on("call-ended", onCallEnded);
+
     return () => {
-      socket.off("video-answer");
-      socket.off("video-ice-candidate");
-      socket.off("call-ended");
+      socket.off("video-answer", onVideoAnswer);
+      socket.off("video-ice-candidate", onIceCandidate);
+      socket.off("call-ended", onCallEnded);
     };
   }, [socket]);
+
 
   const toggleMute = () => {
     if (streamRef.current) {

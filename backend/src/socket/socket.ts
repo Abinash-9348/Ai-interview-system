@@ -3,12 +3,14 @@ import { Message } from "../model/meessage.model.ts";
 import { Room } from "../model/room.model.ts";
 import { Violation } from "../model/violation.model.ts";
 import jwt from 'jsonwebtoken'
+import cookie from 'cookie';
 
 interface JwtPayload {
    id:string
    name:string
    role:string
 }
+
 type User = {
   socketId: string;
   id: string;
@@ -16,90 +18,55 @@ type User = {
   color: string;
 };
 
+// State storage
 const users: Record<string, User[]> = {};
 const pendingUsers: Record<string, User[]> = {};
-const adminSockets: Record<string, string> = {};
 
-
-
-// 🔥 SAFE ADD USER (NO DUPLICATE)
-const addUser = (roomId: string, socket: Socket, user: any) => {
-  if (!users[roomId]) users[roomId] = [];
-
-  // remove old same user
-  users[roomId] = users[roomId].filter(
-    (u) => u.id !== user.id
-  );
-
-  users[roomId].push({
-    socketId: socket.id,
-    id: user.id,
-    name: user.name,
-    color: user.color,
-  });
+// Helper to remove user from all rooms
+const removeUserFromAll = (socketId: string) => {
+  for (const roomId in users) {
+    users[roomId] = users[roomId].filter(u => u.socketId !== socketId);
+  }
+  for (const roomId in pendingUsers) {
+    pendingUsers[roomId] = pendingUsers[roomId].filter(u => u.socketId !== socketId);
+  }
 };
 
 export const initSocket = (io: Server) => {
-
-io.use((
-   socket: Socket,
-   next
-) => {
-
-   try {
-
-      const token =
-         socket.handshake.auth.token
+  io.use((socket: Socket, next) => {
+    try {
+      const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+      const token = cookies.accesstoken;
 
       if (!token) {
-
-         return next(
-            new Error("Unauthorized")
-         )
-
+        return next(new Error("Unauthorized"));
       }
 
-      const decoded = jwt.verify(
-         token,
-         process.env.ACCESS_SECRET as string
-      )
+      const decoded = jwt.verify(token, process.env.ACCESS_SECRET as string) as JwtPayload;
+      socket.data.user = decoded;
+      next();
+    } catch (error) {
+      next(new Error("Invalid token"));
+    }
+  });
 
-      socket.data.user = decoded
-
-      next()
-
-   } catch (error) {
-
-      next(
-         new Error("Invalid token")
-      )
-
-   }
-
-})
   io.on("connection", (socket: Socket) => {
+    console.log("🔌 New connection:", socket.id);
 
-    // ================= JOIN =================
-    socket.on("join", async ({ roomId,color }) => {
-
-      const room = await Room.findOne({ roomId  });
-      const user = socket.data.user as JwtPayload
+    socket.on("join", async ({ roomId, color }) => {
+      const room = await Room.findOne({ roomId });
+      const user = socket.data.user as JwtPayload;
       socket.data.roomId = roomId;
-  
 
-      if (!room || !room.createdBy) return;
+      if (!room) return;
 
-      // ================= ADMIN =================
-      if (
-        room.createdBy.userId?.toString() === user.id?.toString()
-      ) {
+      const isAdmin = room.createdBy?.userId?.toString() === user.id?.toString();
+
+      if (isAdmin) {
         socket.join(roomId);
-
-        adminSockets[roomId] = socket.id;
-
         socket.emit("you-are-admin");
 
-        // send pending users
+        // Send pending users to admin
         if (pendingUsers[roomId]) {
           pendingUsers[roomId].forEach((u) => {
             socket.emit("user-waiting", u);
@@ -110,512 +77,270 @@ io.use((
           socket.emit("code-update", room.code);
         }
 
-        addUser(roomId, socket, user);
+        // Add to active users
+        if (!users[roomId]) users[roomId] = [];
+        users[roomId] = users[roomId].filter(u => u.id !== user.id);
+        users[roomId].push({
+          socketId: socket.id,
+          id: user.id,
+          name: user.name,
+          color: color || "#ff4d4f",
+        });
 
         io.to(roomId).emit("active-users", users[roomId]);
-
         console.log("👑 ADMIN JOINED:", user.name);
+      } else {
+        // Candidate logic
+        if (!pendingUsers[roomId]) pendingUsers[roomId] = [];
+        
+        // Prevent duplicate pending entries for same user
+        pendingUsers[roomId] = pendingUsers[roomId].filter(u => u.id !== user.id);
+        
+        const candidate = {
+          socketId: socket.id,
+          id: user.id,
+          name: user.name,
+          color: color || "#3178c6",
+        };
+        
+        pendingUsers[roomId].push(candidate);
+        
+        // Notify room (admins will listen)
+        io.to(roomId).emit("user-waiting", candidate);
+        socket.emit("waiting-approval");
+        console.log("⏳ CANDIDATE WAITING:", user.name);
+      }
+    });
+
+    socket.on("approve-user", async ({ socketId, roomId }) => {
+      const admin = socket.data.user as JwtPayload;
+      const room = await Room.findOne({ roomId });
+      
+      if (room?.createdBy?.userId?.toString() !== admin.id?.toString()) {
+        return; // Only admin can approve
+      }
+
+      console.log("✅ APPROVING USER:", socketId);
+      io.to(socketId).emit("approved", { roomId });
+    });
+
+    socket.on("reject-user", async ({ socketId, roomId }) => {
+      const admin = socket.data.user as JwtPayload;
+      const room = await Room.findOne({ roomId });
+
+      if (room?.createdBy?.userId?.toString() !== admin.id?.toString()) {
         return;
       }
 
-      // ================= NORMAL USER =================
-      if (!pendingUsers[roomId]) pendingUsers[roomId] = [];
-
-      const alreadyPending = pendingUsers[roomId].find(
-        (u) => u.id === user.id
-      );
-
-      if (!alreadyPending) {
-        pendingUsers[roomId].push({
-          socketId: socket.id,
-          id: user.id,
-          name: user.name,
-          color: color,
-        });
+      io.to(socketId).emit("rejected", { roomId });
+      
+      if (pendingUsers[roomId]) {
+        pendingUsers[roomId] = pendingUsers[roomId].filter(u => u.socketId !== socketId);
       }
-
-      const adminSocketId = adminSockets[roomId];
-
-      if (adminSocketId) {
-        io.to(adminSocketId).emit("user-waiting", {
-          socketId: socket.id,
-          id: user.id,
-          name: user.name,
-          color: color,
-        });
-      }
-
-      socket.emit("waiting-approval");
     });
 
-    // ================= APPROVE =================
-  socket.on(
-  "approve-user",
-  ({ socketId, roomId }) => {
-
-    const user =
-      socket.data.user as JwtPayload;
-
-    // only admin can approve
-    if (user.role !== "admin") {
-      return;
-    }
-
-    io.to(socketId).emit(
-      "approved",
-      { roomId }
-    );
-
-  }
-);
-
-    // ================= REJECT =================
-    socket.on("reject-user", ({ socketId, roomId }) => {
-      const user=socket.data.user as JwtPayload
-      if(user.role != "admin"){
-        return
+    socket.on("approved-join", async ({ roomId, color }) => {
+      const user = socket.data.user as JwtPayload;
+      
+      // Move from pending to active
+      if (pendingUsers[roomId]) {
+        pendingUsers[roomId] = pendingUsers[roomId].filter(u => u.id !== user.id);
       }
 
-      io.to(socketId).emit("rejected",{roomId});
+      socket.join(roomId);
+      
+      if (!users[roomId]) users[roomId] = [];
+      users[roomId] = users[roomId].filter(u => u.id !== user.id);
+      users[roomId].push({
+        socketId: socket.id,
+        id: user.id,
+        name: user.name,
+        color: color || "#ff4d4f",
+      });
 
+      io.to(roomId).emit("active-users", users[roomId]);
+      io.to(roomId).emit("user-joined", {
+        message: `${user.name} joined the room`,
+      });
+      console.log("👤 USER JOINED:", user.name);
     });
 
-    // ================= APPROVED JOIN =================
-   socket.on(
-  "approved-join",
-  ({ roomId, color }) => {
-
-    const user =
-      socket.data.user as JwtPayload;
-
-    const pending =
-      pendingUsers[roomId]?.find(
-        (u) => u.id === user.id
-      );
-
-    if (!pending) return;
-
-    pendingUsers[roomId] =
-      pendingUsers[roomId].filter(
-        (u) => u.id !== user.id
-      );
-
-    socket.join(roomId);
-
-    addUser(roomId, socket, {
-      ...user,
-      color,
-    });
-
-    io.to(roomId).emit(
-      "active-users",
-      users[roomId]
-    );
-
-    io.to(roomId).emit(
-      "user-joined",
-      {
-        message:
-          `${user.name} joined the room`,
-      }
-    );
-
-    console.log(
-      "USER JOINED:",
-      user.name
-    );
-
-  }
-);
-
-    // ================= CODE =================
     socket.on("code-change", async ({ roomId, code }) => {
-      const user=socket.data.user as JwtPayload
-      if(!user)return
-      await Room.findOneAndUpdate(
-        { roomId },
-        { code },
-        { upsert: true }
-      );
-
+      await Room.findOneAndUpdate({ roomId }, { code });
       socket.to(roomId).emit("code-update", code);
     });
 
-    // ================= CURSOR =================
-    socket.on("cursor-move", ({ roomId, position, user }) => {
+    socket.on("cursor-move", ({ roomId, position }) => {
+      const user = socket.data.user as JwtPayload;
       socket.to(roomId).emit("cursor-update", {
         position,
         user: {
-          ...user,
+          id: user.id,
+          name: user.name,
           socketId: socket.id,
         },
       });
     });
 
-    // ================= CHAT =================
-    socket.on("send-message", async ({ roomId, message, user }) => {
+    socket.on("send-message", async ({ roomId, message }) => {
+      const user = socket.data.user as JwtPayload;
       const newMessage = await Message.create({
         roomId,
         message,
-        user,
+        user: {
+          name: user.name,
+          color: "#ff4d4f", // Should ideally be retrieved from active users
+        },
       });
 
       io.to(roomId).emit("receive-message", newMessage);
     });
 
-    // ================= LOAD CHAT =================
     socket.on("load-messages", async (roomId: string) => {
       const messages = await Message.find({ roomId })
         .sort({ createdAt: -1 })
         .limit(50);
-
       socket.emit("previous-messages", messages.reverse());
     });
 
-    socket.on("typing",(roomId,user)=>{
-      socket.to(roomId).emit("user-typing",{
-        name:user.name
-      })
-    })
-    socket.on("stop-typing",(roomId,user)=>{
-      socket.to(roomId).emit("user-stop-typing",{
-        name:user.name
-      })
-    })
-
-// ================= DISCONNECT =================
-socket.on("disconnect", () => {
-  console.log("🔥 disconnect fired");
-
-  if (socket.data.hasLeft) return;
-
-  const roomId = socket.data.roomId;
-  const user = socket.data.user;
-
-  if (!roomId) return;
-
-  // remove from active users
-  if (users[roomId]) {
-    users[roomId] = users[roomId].filter(
-      (u) => u.socketId !== socket.id
-    );
-  }
-
-  // remove from pending users
-  if (pendingUsers[roomId]) {
-    pendingUsers[roomId] = pendingUsers[roomId].filter(
-      (u) => u.socketId !== socket.id
-    );
-  }
-
-  // ✅ notify ALL users
-  io.to(roomId).emit("USER_LEFT", {
-    username: user?.name || "Someone",
-  });
-
-  io.to(roomId).emit("active-users", users[roomId] || []);
-});
-
-
-// ================= LEAVE ROOM =================
-socket.on("leave-room", (_, callback) => {
-  console.log("🚪 manual leave");
-
-  const roomId = socket.data.roomId;
-  const user = socket.data.user as JwtPayload;
-
-  if (!roomId) {
-    callback && callback();
-    return;
-  }
-
-  socket.data.hasLeft = true;
-
-  if (users[roomId]) {
-    users[roomId] = users[roomId].filter(
-      (u) => u.socketId !== socket.id
-    );
-  }
-
-  socket.leave(roomId);
-
-  // ✅ notify ALL users
-  io.to(roomId).emit("USER_LEFT", {
-    username: user?.name || "Someone",
-  });
-
-  io.to(roomId).emit("active-users", users[roomId] || []);
-
-  callback && callback();
-});
-
-
-// ================= TAB EVENTS (NO DB) =================
-socket.on("tab-inactive", ({ roomId, user }) => {
-  const adminSocketId = adminSockets[roomId];
-  
-
-  if (adminSocketId) {
-    io.to(adminSocketId).emit("user-tab-inactive", {
-      message: `${user.name} switched tab`,
-      user,
+    socket.on("typing", (roomId) => {
+      const user = socket.data.user as JwtPayload;
+      socket.to(roomId).emit("user-typing", { name: user.name });
     });
-  }
-});
 
-socket.on("tab-active", ({ roomId, user }) => {
-  const adminSocketId = adminSockets[roomId];
-
-  if (adminSocketId) {
-    io.to(adminSocketId).emit("user-tab-active", {
-      message: `${user.name} is back`,
-      user,
+    socket.on("stop-typing", (roomId) => {
+      const user = socket.data.user as JwtPayload;
+      socket.to(roomId).emit("user-stop-typing", { name: user.name });
     });
-  }
-});
 
-// ================= AI PROCTORING VIOLATIONS =================
-
-// ================= AI PROCTORING VIOLATIONS =================
-
-socket.on(
-  "violation",
-  async ({ roomId, type, username, userId }) => {
-
-    try {
-
-      console.log("⚠️ VIOLATION:", type);
-
-      // SAVE TO DB
-      const violation = await Violation.create({
-        roomId,
-        userId,
-        username,
-        type,
-      });
-
-      // FIND ADMIN
-      const adminSocketId =
-        adminSockets[roomId];
-
-      // SEND REALTIME ALERT
-      if (adminSocketId) {
-
-        io.to(adminSocketId).emit(
-          "violation-alert",
-          violation
-        );
-
-      }
-
-    } catch (error) {
-
-      console.log(error);
-
-    }
-
-  }
-);
-
-// ==============================
-// TRACK TIME SOCKET
-// ==============================
-
-socket.on(
-  "track-time",
-  async ({
-    roomId,
-    userId,
-    username,
-    type,
-    duration,
-  }) => {
-
-    try {
-       const user =
-        socket.data.user as JwtPayload;
-
-      const updateFields: any = {};
-
-      // LOOKING LEFT
-      if (type === "looking_left") {
-
-        updateFields.$inc = {
-          lookingLeftTime: duration,
-        };
-
-      }
-
-      // LOOKING RIGHT
-      else if (type === "looking_right") {
-
-        updateFields.$inc = {
-          lookingRightTime: duration,
-        };
-
-      }
-
-      // HEAD MOVEMENT
-      else if (type === "head_movement") {
-
-        updateFields.$inc = {
-          headMovementTime: duration,
-        };
-
-      }
-
-      // MULTIPLE FACE
-      else if (type === "multiple_faces") {
-
-        updateFields.$inc = {
-          multipleFaceTime: duration,
-        };
-
-      }
-
-      // NO FACE
-      else if (type === "no_face_detected") {
-
-        updateFields.$inc = {
-          noFaceTime: duration,
-        };
-
-      }
-
-    
-        await Violation.findOneAndUpdate(
-
-          {
-            roomId,
-            userId,
-          },
-
-          {
-            username,
-            ...updateFields,
-          },
-
-          {
-            upsert: true,
-            returnDocument: "after",
-          }
-
-        );
-
-      // ADMIN ALERT
-      const adminSocketId =
-        adminSockets[roomId];
-
-      if (adminSocketId) {
-
-        io.to(adminSocketId).emit(
-          "violation-alert",
-          {
-    username,
-    type,
-  }
-        );
-
-      }
-
-    } catch (error) {
-
-      console.log(error);
-
-    }
-
-  }
-);
- //video call
-socket.on(
-  "video-offer",
-  ({ roomId, offer, type }) => {
-
-    const user =
-      socket.data.user as JwtPayload;
-
-    console.log(
-      "📥 Server forwarding video-offer",
-      roomId,
-      type
-    );
-
-    socket.to(roomId).emit(
-      "video-offer",
-      {
+    // WebRTC Signaling (Targeted)
+    socket.on("video-offer", ({ roomId, offer, type, toSocketId }) => {
+      const user = socket.data.user as JwtPayload;
+      const payload = {
         offer,
         from: {
           id: user.id,
           name: user.name,
           role: user.role,
+          socketId: socket.id,
         },
         type,
+      };
+
+      if (toSocketId) {
+        io.to(toSocketId).emit("video-offer", payload);
+      } else {
+        socket.to(roomId).emit("video-offer", payload);
       }
-    );
+    });
 
-  }
-);
-
-socket.on(
-  "video-answer",
-  ({ roomId, answer }) => {
-
-    const user =
-      socket.data.user as JwtPayload;
-
-    socket.to(roomId).emit(
-      "video-answer",
-      {
+    socket.on("video-answer", ({ answer, toSocketId }) => {
+      const user = socket.data.user as JwtPayload;
+      io.to(toSocketId).emit("video-answer", {
         answer,
-        from: {
-          id: user.id,
-          name: user.name,
-        },
-      }
-    );
+        from: { id: user.id, name: user.name, socketId: socket.id },
+      });
+    });
 
-  }
-);
-
-socket.on(
-  "video-ice-candidate",
-  ({ roomId, candidate }) => {
-
-    const user =
-      socket.data.user as JwtPayload;
-
-    socket.to(roomId).emit(
-      "video-ice-candidate",
-      {
+    socket.on("video-ice-candidate", ({ candidate, toSocketId }) => {
+      const user = socket.data.user as JwtPayload;
+      io.to(toSocketId).emit("video-ice-candidate", {
         candidate,
-        from: {
-          id: user.id,
-          name: user.name,
-        },
+        from: { id: user.id, name: user.name, socketId: socket.id },
+      });
+    });
+
+    socket.on("call-ended", ({ roomId, toSocketId }) => {
+      const user = socket.data.user as JwtPayload;
+      const payload = { user: { id: user.id, name: user.name } };
+      if (toSocketId) {
+        io.to(toSocketId).emit("call-ended", payload);
+      } else {
+        socket.to(roomId).emit("call-ended", payload);
       }
-    );
+    });
 
-  }
-);
+    // Proctoring & Tab events
+    socket.on("tab-inactive", ({ roomId }) => {
+      const user = socket.data.user as JwtPayload;
+      socket.to(roomId).emit("user-tab-inactive", {
+        message: `${user.name} switched tab`,
+        user,
+      });
+    });
 
-socket.on(
-  "call-ended",
-  ({ roomId }) => {
+    socket.on("tab-active", ({ roomId }) => {
+      const user = socket.data.user as JwtPayload;
+      socket.to(roomId).emit("user-tab-active", {
+        message: `${user.name} is back`,
+        user,
+      });
+    });
 
-    const user =
-      socket.data.user as JwtPayload;
-
-    socket.to(roomId).emit(
-      "call-ended",
-      {
-        user: {
-          id: user.id,
-          name: user.name,
-        },
+    socket.on("violation", async ({ roomId, type }) => {
+      const user = socket.data.user as JwtPayload;
+      try {
+        const violation = await Violation.create({
+          roomId,
+          userId: user.id,
+          username: user.name,
+          type,
+        });
+        socket.to(roomId).emit("violation-alert", violation);
+      } catch (error) {
+        console.error("Violation save error:", error);
       }
-    );
+    });
 
-  }
-);
+    socket.on("track-time", async ({ roomId, type, duration }) => {
+      const user = socket.data.user as JwtPayload;
+      try {
+        const updateFields: any = {};
+        const fieldMap: Record<string, string> = {
+          looking_left: "lookingLeftTime",
+          looking_right: "lookingRightTime",
+          head_movement: "headMovementTime",
+          multiple_faces: "multipleFaceTime",
+          no_face_detected: "noFaceTime",
+        };
+
+        if (fieldMap[type]) {
+          updateFields.$inc = { [fieldMap[type]]: duration };
+        }
+
+        await Violation.findOneAndUpdate(
+          { roomId, userId: user.id },
+          { username: user.name, ...updateFields },
+          { upsert: true }
+        );
+
+        socket.to(roomId).emit("violation-alert", { username: user.name, type });
+      } catch (error) {
+        console.error("Track time error:", error);
+      }
+    });
+
+    const handleDisconnect = () => {
+      const roomId = socket.data.roomId;
+      const user = socket.data.user as JwtPayload;
+
+      if (!roomId) return;
+
+      removeUserFromAll(socket.id);
+
+      io.to(roomId).emit("USER_LEFT", { username: user?.name || "Someone" });
+      io.to(roomId).emit("active-users", users[roomId] || []);
+      console.log("🔥 Disconnected:", socket.id);
+    };
+
+    socket.on("leave-room", (_, callback) => {
+      handleDisconnect();
+      socket.leave(socket.data.roomId);
+      if (callback) callback();
+    });
+
+    socket.on("disconnect", () => {
+      handleDisconnect();
+    });
   });
 };

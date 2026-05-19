@@ -77,22 +77,23 @@ export default function HomePage() {
 
     // Set endpoint and body based on the mode
     const endpoint = modalMode === "create" 
-      ? " http://localhost:8000/room/create" 
-      : " http://localhost:8000/room/join";
+      ? "http://localhost:8000/room/create" 
+      : "http://localhost:8000/room/join";
 
- const body = modalMode === "create"
-  ? {
-      language: selectedLanguage,
-      user: {
-        id: userId,
-        name: userName,
-        color: "#ff4d4f"
+const body =
+  modalMode === "create"
+
+    ? {
+        language: selectedLanguage,
       }
-    }
-  : { roomId: roomIdInput };
+
+    : {
+        roomId: roomIdInput,
+      };
     try {
       const response = await fetch(endpoint, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -122,6 +123,8 @@ export default function HomePage() {
 }
       } else {
         alert(data.message || "Something went wrong. Please try again.");
+        console.log("STATUS:", response.status);
+console.log("DATA:", data);
       }
     } catch (err) {
       console.error("Navigation failed:", err);
