@@ -7,6 +7,9 @@ import { ACTION } from "../Action";
 import { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
 import CallModal from "../components/callModal";
+import { FileUp } from "lucide-react";
+import JDUploadModal from "../components/JDUploadModal";
+
 import {
   Play,
   ChevronDown,
@@ -75,7 +78,7 @@ export default function CodePage() {
     location.state?.name || localStorage.getItem("display_name") || "Guest";
   const username =
     location.state?.name || localStorage.getItem("display_name") || "Guest";
-  const userId = 
+  const userId =
     location.state?.userId || localStorage.getItem("user_id") || "guest-id";
 
   const [language, setLanguage] = useState(incomingLanguage);
@@ -99,11 +102,18 @@ export default function CodePage() {
   const [waitingUsers, setWaitingUsers] = useState<User[]>([]);
   const [isWaiting, setIsWaiting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-    const [activeCallType, setActiveCallType] = useState<"audio" | "video" | null>(null);
-    const [incomingCall, setIncomingCall] = useState<{ offer: any; from: string; type: "audio" | "video" } | null>(null);
-    const [pendingIceCandidates, setPendingIceCandidates] = useState<any[]>([]);
+  const [activeCallType, setActiveCallType] = useState<
+    "audio" | "video" | null
+  >(null);
+  const [incomingCall, setIncomingCall] = useState<{
+    offer: any;
+    from: string;
+    type: "audio" | "video";
+  } | null>(null);
+  const [pendingIceCandidates, setPendingIceCandidates] = useState<any[]>([]);
+  const [isJDModalOpen, setIsJDModalOpen] = useState(false);
 
- useEffect(() => {
+  useEffect(() => {
     const handleCall = () => {
       console.log("📞 start call event triggered");
       setActiveCallType("video"); // Default to video when opening via sidebar/nav
@@ -117,11 +127,11 @@ export default function CodePage() {
   }, []);
 
   // ================= SOCKET =================
-type User = {
-  socketId: string;
-  name: string;
-  color: string;
-};
+  type User = {
+    socketId: string;
+    name: string;
+    color: string;
+  };
   // useEffect(() => {
   //   const fetchStatus = async () => {
   //     try {
@@ -139,7 +149,8 @@ type User = {
   //   };
 
   //   fetchStatus();
-  // }, [roomId]);  useEffect(() => {
+  // }, [roomId]);
+  useEffect(() => {
     if (!roomId) return;
 
     const socket = initsocket();
@@ -245,7 +256,7 @@ type User = {
     const onVideoOffer = ({ offer, from, type }: any) => {
       console.log(`📥 Incoming ${type} offer from:`, from.name);
       setIncomingCall({ offer, from: from.socketId, type }); // Save socketId as from
-      setPendingIceCandidates([]); 
+      setPendingIceCandidates([]);
       setActiveCallType(type);
     };
 
@@ -279,7 +290,7 @@ type User = {
       timeoutRef.current = setTimeout(() => {
         socket.emit(
           document.visibilityState === "hidden" ? "tab-inactive" : "tab-active",
-          { roomId }
+          { roomId },
         );
       }, 100);
     };
@@ -357,89 +368,77 @@ type User = {
     });
   };
 
-
   /// Redirect to join page
-//  const handleShare = async () => {
-//   const link = `${window.location.origin}/?room=${roomId}`;
+  //  const handleShare = async () => {
+  //   const link = `${window.location.origin}/?room=${roomId}`;
 
-//   try {
-//     if (navigator.share) {
-//       await navigator.share({
-//         title: "Join Room",
-//         text: "Join Abinash coding room 🚀",
-//         url: link, 
-//       });
-//     } else {
-//       await navigator.clipboard.writeText(link);
-//       setCopied(true);
-//       setTimeout(() => setCopied(false), 2000);
-//       alert("Link copied! You can paste it anywhere.");
-//     }
-//   } catch (error) {
-//     console.log("Share cancelled or failed", error);
-//   }
-// };
+  //   try {
+  //     if (navigator.share) {
+  //       await navigator.share({
+  //         title: "Join Room",
+  //         text: "Join Abinash coding room 🚀",
+  //         url: link,
+  //       });
+  //     } else {
+  //       await navigator.clipboard.writeText(link);
+  //       setCopied(true);
+  //       setTimeout(() => setCopied(false), 2000);
+  //       alert("Link copied! You can paste it anywhere.");
+  //     }
+  //   } catch (error) {
+  //     console.log("Share cancelled or failed", error);
+  //   }
+  // };
 
+  const handleShare = async () => {
+    const link = `${window.location.origin}/register?room=${roomId}`;
 
-const handleShare = async () => {
-  const link = `${window.location.origin}/register?room=${roomId}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Join Room",
+          text: "Join Abinash coding room 🚀",
+          url: link,
+        });
+      } else {
+        await navigator.clipboard.writeText(link);
 
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: "Join Room",
-        text: "Join Abinash coding room 🚀",
-        url: link,
-      });
-    } else {
-      await navigator.clipboard.writeText(link);
+        setCopied(true);
 
-      setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
 
-      setTimeout(() => setCopied(false), 2000);
-
-      alert("Link copied! You can paste it anywhere.");
+        alert("Link copied! You can paste it anywhere.");
+      }
+    } catch (error) {
+      console.log("Share cancelled or failed", error);
     }
-  } catch (error) {
-    console.log("Share cancelled or failed", error);
-  }
-};
-const sendMessage = () => {
+  };
+  const sendMessage = () => {
+    if (!chatInput.trim()) return;
 
-   if (!chatInput.trim()) return;
-
-   const msgData = {
-
+    const msgData = {
       roomId,
 
       message: chatInput,
 
       // local ui only
       user: {
-         name: displayName,
-         color: "#ff4d4f",
+        name: displayName,
+        color: "#ff4d4f",
       },
+    };
 
-   };
+    // optimistic ui
+    setMessages((prev) => [...prev, msgData]);
 
-   // optimistic ui
-   setMessages((prev) => [
-      ...prev,
-      msgData,
-   ]);
+    // secure backend emit
+    socketRef.current?.emit("send-message", {
+      roomId,
+      message: chatInput,
+    });
 
-   // secure backend emit
-   socketRef.current?.emit(
-      "send-message",
-      {
-         roomId,
-         message: chatInput,
-      }
-   );
-
-   setChatInput("");
-
-};
+    setChatInput("");
+  };
   // const handleLockRoom = async () => {
   //   try {
   //     const response = await fetch("https://cloude-backend.onrender.com/room/locked", {
@@ -461,36 +460,35 @@ const sendMessage = () => {
   //   }
   // };
 
+  const handleLockRoom = async () => {
+    try {
+      const endpoint = isLocked
+        ? "http://localhost:8000/room/unlocked"
+        : "http://localhost:8000/room/locked";
 
- const handleLockRoom = async () => {
-  try {
-    const endpoint = isLocked
-      ? "http://localhost:8000/room/unlocked"
-      : "http://localhost:8000/room/locked";
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId }),
+      });
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomId }),
-    });
+      const result = await response.json();
 
-    const result = await response.json();
+      if (response.ok) {
+        setIsLocked(!isLocked);
 
-    if (response.ok) {
-      setIsLocked(!isLocked);
-
-      toast.success(
-        isLocked
-          ? "Room unlocked successfully!"
-          : "Room locked successfully!"
-      );
-    } else {
-      toast.error(result.message || "Failed to update room state");
+        toast.success(
+          isLocked
+            ? "Room unlocked successfully!"
+            : "Room locked successfully!",
+        );
+      } else {
+        toast.error(result.message || "Failed to update room state");
+      }
+    } catch (error) {
+      toast.error("Server connection error");
     }
-  } catch (error) {
-    toast.error("Server connection error");
-  }
-};
+  };
   const isLanguageLocked = !!location.state?.language;
   const [theme, setTheme] = useState("vs-dark");
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
@@ -518,8 +516,8 @@ const sendMessage = () => {
       if (result.success) {
         setOutput(
           result.data.output ||
-          result.data.error ||
-          `Status: ${result.data.status}`,
+            result.data.error ||
+            `Status: ${result.data.status}`,
         );
       } else {
         setOutput("Execution Failed");
@@ -554,21 +552,20 @@ const sendMessage = () => {
   return (
     <div className="pt-24 px-6 min-h-screen bg-[#050505] text-white">
       {isWaiting && (
-  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[999] backdrop-blur-sm">
-    <div className="bg-[#111] p-8 rounded-2xl text-center shadow-2xl border border-white/10 w-[320px]">
-      
-      <div className="w-12 h-12 border-4 border-[#00ff88] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[999] backdrop-blur-sm">
+          <div className="bg-[#111] p-8 rounded-2xl text-center shadow-2xl border border-white/10 w-[320px]">
+            <div className="w-12 h-12 border-4 border-[#00ff88] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
 
-      <h2 className="text-lg font-bold text-white">
-        Waiting for approval
-      </h2>
+            <h2 className="text-lg font-bold text-white">
+              Waiting for approval
+            </h2>
 
-      <p className="text-gray-400 text-sm mt-2">
-        Admin will allow you soon...
-      </p>
-    </div>
-  </div>
-)}
+            <p className="text-gray-400 text-sm mt-2">
+              Admin will allow you soon...
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto">
         {/* HEADER AREA */}
@@ -598,7 +595,9 @@ const sendMessage = () => {
                 </span>
               </h1>
               <p className="text-[10px] text-white/40 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
-                <div className={`w-1.5 h-1.5 rounded-full ${isCollab ? "bg-[#00ff88] animate-pulse" : "bg-white/20"}`} />
+                <div
+                  className={`w-1.5 h-1.5 rounded-full ${isCollab ? "bg-[#00ff88] animate-pulse" : "bg-white/20"}`}
+                />
                 {isCollab ? "Live Session" : "Solo Mode"}
               </p>
 
@@ -608,12 +607,15 @@ const sendMessage = () => {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ff88]"></span>
                 </span>
                 <span className="text-[10px] font-bold text-white/60 tracking-widest uppercase">
-              {isCollab ? username : "Guest"}
+                  {isCollab ? username : "Guest"}
                 </span>
               </div>
             </div>
-
           </div>
+
+
+
+         
 
           {/* COLLABORATORS & ACTIONS */}
           <div className="flex items-center gap-5 w-full md:w-auto bg-black/20 p-2 rounded-2xl border border-white/5">
@@ -623,6 +625,22 @@ const sendMessage = () => {
             >
               {theme === "vs-dark" ? "🌙 Dark" : "☀️ Light"}
             </button>
+ {isAdmin && (
+  <>
+    <button
+      onClick={() => setIsJDModalOpen(true)}
+      className="flex items-center gap-2 px-4 py-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 hover:bg-cyan-400/20 text-cyan-400 text-sm font-bold transition-all"
+    >
+      <FileUp size={16} />
+      JD Upload
+    </button>
+
+    <JDUploadModal
+      isOpen={isJDModalOpen}
+      onClose={() => setIsJDModalOpen(false)}
+    />
+  </>
+)}
             {/* Dynamic Avatars (Replaced Person Icon) */}
             {user.length > 0 && (
               <div className="flex items-center gap-2 pl-2">
@@ -668,12 +686,16 @@ const sendMessage = () => {
             {isAdmin && (
               <button
                 onClick={handleLockRoom}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-bold ${isLocked
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-bold ${
+                  isLocked
                     ? "bg-red-500/10 border-red-500/30 text-red-400"
                     : "bg-white/5 border-white/10 text-white/70 hover:text-white hover:border-[#00ff88]/50"
-                  }`}
+                }`}
               >
-                <Lock size={16} className={isLocked ? "text-red-400" : "text-[#00ff88]"} />
+                <Lock
+                  size={16}
+                  className={isLocked ? "text-red-400" : "text-[#00ff88]"}
+                />
                 {isLocked ? "Unlock Room" : "Lock Room"}
               </button>
             )}
@@ -681,10 +703,11 @@ const sendMessage = () => {
             {isAdmin && (
               <button
                 onClick={handleShare}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-bold ${copied
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-bold ${
+                  copied
                     ? "bg-[#00ff88]/20 border-[#00ff88] text-[#00ff88]"
                     : "bg-white/10 border-white/10 hover:bg-white/20 text-white"
-                  }`}
+                }`}
               >
                 {copied ? <CheckCircle2 size={16} /> : <Share2 size={16} />}
                 {copied ? "Copied" : "Invite"}
@@ -694,60 +717,59 @@ const sendMessage = () => {
         </div>
 
         {isAdmin && (
-  <div className="fixed right-6 bottom-6 bg-[#111] p-4 rounded-2xl shadow-2xl border border-white/10 w-[280px] z-50">
-    
-    <h3 className="text-sm font-bold mb-3 text-white">
-      Pending Requests
-    </h3>
+          <div className="fixed right-6 bottom-6 bg-[#111] p-4 rounded-2xl shadow-2xl border border-white/10 w-[280px] z-50">
+            <h3 className="text-sm font-bold mb-3 text-white">
+              Pending Requests
+            </h3>
 
-    {waitingUsers.length === 0 && (
-      <p className="text-gray-500 text-xs">No users waiting</p>
-    )}
+            {waitingUsers.length === 0 && (
+              <p className="text-gray-500 text-xs">No users waiting</p>
+            )}
 
-    {waitingUsers.map((u) => (
-      <div
-        key={u.socketId}
-        className="flex items-center justify-between mb-2 bg-[#1a1a1a] p-2 rounded-lg"
-      >
-        <span className="text-sm text-white">{u.name}</span>
+            {waitingUsers.map((u) => (
+              <div
+                key={u.socketId}
+                className="flex items-center justify-between mb-2 bg-[#1a1a1a] p-2 rounded-lg"
+              >
+                <span className="text-sm text-white">{u.name}</span>
 
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              socketRef.current?.emit("approve-user", {
-                socketId: u.socketId,
-                roomId,
-              });
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      socketRef.current?.emit("approve-user", {
+                        socketId: u.socketId,
+                        roomId,
+                      });
 
-              setWaitingUsers((prev) =>
-                prev.filter((user) => user.socketId !== u.socketId)
-              );
-            }}
-            className="bg-[#00ff88] text-black px-2 py-1 rounded text-xs hover:bg-[#00cc6e]"
-          >
-            ✓
-          </button>
+                      setWaitingUsers((prev) =>
+                        prev.filter((user) => user.socketId !== u.socketId),
+                      );
+                    }}
+                    className="bg-[#00ff88] text-black px-2 py-1 rounded text-xs hover:bg-[#00cc6e]"
+                  >
+                    ✓
+                  </button>
 
-          <button
-            onClick={() => {
-              socketRef.current?.emit("reject-user", {
-                socketId: u.socketId,
-                roomId,
-              });
+                  <button
+                    onClick={() => {
+                      socketRef.current?.emit("reject-user", {
+                        socketId: u.socketId,
+                        roomId,
+                      });
 
-              setWaitingUsers((prev) =>
-                prev.filter((user) => user.socketId !== u.socketId)
-              );
-            }}
-            className="bg-red-500 px-2 py-1 rounded text-xs hover:bg-red-600"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
+                      setWaitingUsers((prev) =>
+                        prev.filter((user) => user.socketId !== u.socketId),
+                      );
+                    }}
+                    className="bg-red-500 px-2 py-1 rounded text-xs hover:bg-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* EDITOR SECTION */}
@@ -759,10 +781,11 @@ const sendMessage = () => {
                     !isLanguageLocked && setIsDropdownOpen(!isDropdownOpen)
                   }
                   className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm transition-all
-  ${isLanguageLocked
-                      ? "bg-white/5 border-white/5 text-white/40 cursor-not-allowed"
-                      : "bg-white/5 border-white/10 hover:border-[#00ff88]/50"
-                    }
+  ${
+    isLanguageLocked
+      ? "bg-white/5 border-white/5 text-white/40 cursor-not-allowed"
+      : "bg-white/5 border-white/10 hover:border-[#00ff88]/50"
+  }
 `}
                 >
                   <span style={{ color: selectedLangData?.color }}>
@@ -809,10 +832,11 @@ const sendMessage = () => {
                   onClick={compileAndRun}
                   disabled={isLoading}
                   title="Run Code"
-                  className={`p-2.5 rounded-lg flex items-center justify-center transition-all shadow-lg ${isLoading
+                  className={`p-2.5 rounded-lg flex items-center justify-center transition-all shadow-lg ${
+                    isLoading
                       ? "bg-white/10 text-white/40 cursor-not-allowed"
                       : "bg-[#00ff88] text-black hover:bg-[#00cc6e] hover:shadow-[0_0_15px_rgba(0,255,136,0.4)] active:scale-95"
-                    }`}
+                  }`}
                 >
                   {isLoading ? (
                     <div className="w-[18px] h-[18px] border-2 border-black/20 border-t-black rounded-full animate-spin" />
@@ -890,22 +914,22 @@ const sendMessage = () => {
                 })}
             </div>
 
-{activeCallType && socketRef.current && (
-  <CallModal
-    onClose={() => {
-      setActiveCallType(null);
-      setIncomingCall(null);
-      setPendingIceCandidates([]);
-    }}
-    socket={socketRef.current}
-    roomId={roomId!}
-    userId={userId}
-    username={displayName}
-    incomingCall={incomingCall}
-    initialIceCandidates={pendingIceCandidates}
-    preSelectedType={activeCallType}
-  />
-)}
+            {activeCallType && socketRef.current && (
+              <CallModal
+                onClose={() => {
+                  setActiveCallType(null);
+                  setIncomingCall(null);
+                  setPendingIceCandidates([]);
+                }}
+                socket={socketRef.current}
+                roomId={roomId!}
+                userId={userId}
+                username={displayName}
+                incomingCall={incomingCall}
+                initialIceCandidates={pendingIceCandidates}
+                preSelectedType={activeCallType}
+              />
+            )}
             {/* <button
               onClick={compileAndRun}
               disabled={isLoading}
@@ -948,18 +972,20 @@ const sendMessage = () => {
                     return (
                       <div
                         key={i}
-                        className={`flex flex-col ${isMe ? "items-end" : "items-start"
-                          }`}
+                        className={`flex flex-col ${
+                          isMe ? "items-end" : "items-start"
+                        }`}
                       >
                         <span className="text-[#00ff88] text-[9px] font-bold uppercase mb-1 opacity-60">
                           {msg.user?.name}
                         </span>
 
                         <div
-                          className={`max-w-[80%] p-2 rounded-xl text-sm border ${isMe
+                          className={`max-w-[80%] p-2 rounded-xl text-sm border ${
+                            isMe
                               ? "bg-[#00ff88]/10 border-[#00ff88]/20 text-white"
                               : "bg-white/5 border-white/5 text-white/80"
-                            }`}
+                          }`}
                         >
                           {msg.message}
                         </div>
