@@ -7,12 +7,19 @@ import {
 
 import toast from "react-hot-toast";
 
+interface JDUploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onUploadSuccess?: (jdData: any) => void;
+}
+
 export default function JDUploadModal({
   isOpen,
   onClose,
-}) {
+  onUploadSuccess,
+}: JDUploadModalProps) {
   const [selectedFile, setSelectedFile] =
-    useState(null);
+    useState<File | null>(null);
 
   const [uploading, setUploading] =
     useState(false);
@@ -47,6 +54,10 @@ export default function JDUploadModal({
         toast.success(
           "JD Uploaded Successfully"
         );
+
+        if (onUploadSuccess) {
+          onUploadSuccess(data.data);
+        }
 
         onClose();
       } else {

@@ -102,6 +102,7 @@ export default function CodePage() {
   const [waitingUsers, setWaitingUsers] = useState<User[]>([]);
   const [isWaiting, setIsWaiting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [interview, setInterview] = useState<any>(null);
   const [activeCallType, setActiveCallType] = useState<
     "audio" | "video" | null
   >(null);
@@ -638,6 +639,12 @@ export default function CodePage() {
     <JDUploadModal
       isOpen={isJDModalOpen}
       onClose={() => setIsJDModalOpen(false)}
+      onUploadSuccess={(jdData) => {
+        setInterview(jdData);
+        if (jdData?._id) {
+          localStorage.setItem(`interview_id_${roomId}`, jdData._id);
+        }
+      }}
     />
   </>
 )}
@@ -914,22 +921,38 @@ export default function CodePage() {
                 })}
             </div>
 
-            {activeCallType && socketRef.current && (
-              <CallModal
-                onClose={() => {
-                  setActiveCallType(null);
-                  setIncomingCall(null);
-                  setPendingIceCandidates([]);
-                }}
-                socket={socketRef.current}
-                roomId={roomId!}
-                userId={userId}
-                username={displayName}
-                incomingCall={incomingCall}
-                initialIceCandidates={pendingIceCandidates}
-                preSelectedType={activeCallType}
-              />
-            )}
+            {activeCallType && socketRef.current && (() => {
+              const socket = socketRef.current;
+              const roomIdVal = roomId!;
+              const interviewId = interview?._id || localStorage.getItem(`interview_id_${roomId}`);
+              const username = displayName;
+              const initialIceCandidates = pendingIceCandidates;
+              const preSelectedType = activeCallType;
+              const handleCloseModal = () => {
+                setActiveCallType(null);
+                setIncomingCall(null);
+                setPendingIceCandidates([]);
+              };
+
+              console.log(
+                "FINAL INTERVIEW ID:",
+                interviewId
+              );
+
+              return (
+                <CallModal
+                  socket={socket}
+                  roomId={roomIdVal}
+                  interviewId={interviewId || undefined}
+                  userId={userId}
+                  username={username}
+                  incomingCall={incomingCall}
+                  initialIceCandidates={initialIceCandidates}
+                  preSelectedType={preSelectedType}
+                  onClose={handleCloseModal}
+                />
+              );
+            })()}
             {/* <button
               onClick={compileAndRun}
               disabled={isLoading}

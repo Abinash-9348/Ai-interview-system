@@ -339,6 +339,30 @@ export const initSocket = (io: Server) => {
       if (callback) callback();
     });
 
+     socket.on(
+          "start-interview",
+          (data) => {
+
+            console.log(
+              "Interview Started"
+            );
+
+            io.emit(
+              "start-interview",
+              data
+            );
+          }
+        );
+        socket.on(
+  "end-interview",
+  (data) => {
+
+    io.emit(
+      "end-interview",
+      data
+    );
+  }
+);
     socket.on("disconnect", () => {
       handleDisconnect();
     });

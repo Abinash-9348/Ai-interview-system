@@ -9,6 +9,10 @@ import RegisterPage from './pages/RegisterPage';
 import Navigation from './components/Navigation';
 import ForgotPasswordPage from './pages/ForgotPassword';
 import ResetPasswordPage from './pages/ResetPassord';
+import InterviewPage from './components/InterviewPage';
+import { io } from "socket.io-client";
+const socket =
+  io("http://localhost:8000");
 
 
 function App() {
@@ -28,6 +32,14 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+  <Route
+  path="/interview/:roomId"
+  element={
+    <InterviewPage
+      socket={socket}
+    />
+  }
+/>
         </Routes>
       </div>
     </BrowserRouter>
