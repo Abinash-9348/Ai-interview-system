@@ -4,6 +4,9 @@ import { Room } from "../model/room.model.ts";
 import { Violation } from "../model/violation.model.ts";
 import jwt from 'jsonwebtoken'
 import cookie from 'cookie';
+import { InterviewResult } from "../model/interview.result.ts";
+import { Interview } from "../model/interview.model.ts";
+
 
 interface JwtPayload {
    id:string
@@ -51,8 +54,13 @@ export const initSocket = (io: Server) => {
   });
 
   io.on("connection", (socket: Socket) => {
-    console.log("🔌 New connection:", socket.id);
+//  socket.onAny((event) => {
 
+//       console.log(
+//         "EVENT:",
+//         event
+//       );
+//     });
     socket.on("join", async ({ roomId, color }) => {
       const room = await Room.findOne({ roomId });
       const user = socket.data.user as JwtPayload;
@@ -88,9 +96,34 @@ export const initSocket = (io: Server) => {
         });
 
         io.to(roomId).emit("active-users", users[roomId]);
-        console.log("👑 ADMIN JOINED:", user.name);
+       
       } else {
         // Candidate logic
+        
+        // Auto-approve if they already have an active interview session in this room
+        const activeInterview = await Interview.findOne({
+          roomId,
+          candidateId: user.id,
+          status: "started"
+        });
+
+        if (activeInterview) {
+          console.log(`👤 Auto-approving reconnecting candidate ${user.name} in room ${roomId}`);
+          socket.join(roomId);
+          socket.emit("approved", { roomId });
+          
+          if (!users[roomId]) users[roomId] = [];
+          users[roomId] = users[roomId].filter(u => u.id !== user.id);
+          users[roomId].push({
+            socketId: socket.id,
+            id: user.id,
+            name: user.name,
+            color: color || "#3178c6",
+          });
+          io.to(roomId).emit("active-users", users[roomId]);
+          return;
+        }
+
         if (!pendingUsers[roomId]) pendingUsers[roomId] = [];
         
         // Prevent duplicate pending entries for same user
@@ -108,7 +141,7 @@ export const initSocket = (io: Server) => {
         // Notify room (admins will listen)
         io.to(roomId).emit("user-waiting", candidate);
         socket.emit("waiting-approval");
-        console.log("⏳ CANDIDATE WAITING:", user.name);
+  
       }
     });
 
@@ -120,7 +153,7 @@ export const initSocket = (io: Server) => {
         return; // Only admin can approve
       }
 
-      console.log("✅ APPROVING USER:", socketId);
+
       io.to(socketId).emit("approved", { roomId });
     });
 
@@ -261,21 +294,41 @@ export const initSocket = (io: Server) => {
     });
 
     // Proctoring & Tab events
-    socket.on("tab-inactive", ({ roomId }) => {
-      const user = socket.data.user as JwtPayload;
-      socket.to(roomId).emit("user-tab-inactive", {
-        message: `${user.name} switched tab`,
-        user,
-      });
-    });
+socket.on(
+  "tab-inactive",
+  ({ roomId }) => {
 
-    socket.on("tab-active", ({ roomId }) => {
-      const user = socket.data.user as JwtPayload;
-      socket.to(roomId).emit("user-tab-active", {
-        message: `${user.name} is back`,
+    const user =
+      socket.data.user as JwtPayload;
+
+    io.to(roomId).emit(
+      "user-tab-inactive",
+      {
+        message:
+          `${user.name} switched tab`,
         user,
-      });
-    });
+      }
+    );
+  }
+);
+
+socket.on(
+  "tab-active",
+  ({ roomId }) => {
+
+    const user =
+      socket.data.user as JwtPayload;
+
+    io.to(roomId).emit(
+      "user-tab-active",
+      {
+        message:
+          `${user.name} is back`,
+        user,
+      }
+    );
+  }
+);
 
     socket.on("violation", async ({ roomId, type }) => {
       const user = socket.data.user as JwtPayload;
@@ -361,6 +414,84 @@ export const initSocket = (io: Server) => {
       "end-interview",
       data
     );
+  }
+);
+
+socket.on(
+  "candidate-answer",
+
+  async ({
+    roomId,
+    interviewId,
+    question,
+    answer,
+  }) => {
+
+    try {
+      const user = socket.data.user as JwtPayload;
+
+      // FIND RESULT BY interviewId OR roomId
+      let result = null;
+      if (interviewId) {
+        result = await InterviewResult.findOne({ interviewId });
+      }
+      if (!result) {
+        result = await InterviewResult.findOne({ roomId });
+      }
+
+      // CHECK AND CREATE
+      if (!result) {
+        console.log("InterviewResult not found, creating new one...");
+        let candidateId = user?.id;
+
+        // Try to fetch candidateId from Interview if available
+        if (interviewId) {
+          const interview = await Interview.findById(interviewId);
+          if (interview) {
+            candidateId = interview.candidateId?.toString();
+          }
+        }
+
+        result = await InterviewResult.create({
+          interviewId,
+          candidateId,
+          roomId,
+          answers: [],
+        });
+      }
+
+      // Upsert answer to avoid duplicates of the same question
+      const existingAnswerIndex = result.answers.findIndex(
+        (a: any) => a.question === question
+      );
+
+      const wordCount = answer ? answer.trim().split(/\s+/).filter(Boolean).length : 0;
+
+      if (existingAnswerIndex !== -1) {
+        result.answers[existingAnswerIndex].answer = answer;
+        result.answers[existingAnswerIndex].wordCount = wordCount;
+      } else {
+        result.answers.push({
+          question,
+          answer,
+          technicalScore: 0,
+          communicationScore: 0,
+          confidenceScore: 0,
+          feedback: "",
+          correctAnswer: "",
+          timeTaken: 0,
+          wordCount,
+        });
+      }
+
+      // SAVE
+      await result.save();
+
+      console.log(`✅ Candidate Answer Saved/Updated in DB for room: ${roomId}, interview: ${interviewId}`);
+
+    } catch (error) {
+      console.error("❌ Error in candidate-answer socket handler:", error);
+    }
   }
 );
     socket.on("disconnect", () => {

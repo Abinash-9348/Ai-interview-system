@@ -160,6 +160,7 @@ export const uploadJD = async (
 
     });
 
+    
     // RESPONSE
 
     return res.status(201).json({
@@ -170,7 +171,7 @@ export const uploadJD = async (
         "JD uploaded successfully",
 
       data: jd,
-
+     
     });
 
   } catch (error: any) {

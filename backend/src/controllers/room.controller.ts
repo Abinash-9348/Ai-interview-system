@@ -1,7 +1,7 @@
 import { Request,Response } from "express";
 import { createRoomServices , getRoomService, joinRoomServices, lockedRoom, unlockroom } from "../services/room.services.ts";
 
-export const createRoomController = async (req, res) => {
+export const createRoomController = async (req:Request, res:Response) => {
 
   try {
 

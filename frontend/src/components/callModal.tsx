@@ -85,6 +85,7 @@ const handleStartInterview = () => {
     "start-interview",
     {
       interviewId,
+     
     }
   );
 };

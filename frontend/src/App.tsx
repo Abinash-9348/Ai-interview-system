@@ -10,9 +10,8 @@ import Navigation from './components/Navigation';
 import ForgotPasswordPage from './pages/ForgotPassword';
 import ResetPasswordPage from './pages/ResetPassord';
 import InterviewPage from './components/InterviewPage';
-import { io } from "socket.io-client";
-const socket =
-  io("http://localhost:8000");
+import { initsocket } from "./socket";
+const socket = initsocket();
 
 
 function App() {

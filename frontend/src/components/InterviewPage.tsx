@@ -4,160 +4,163 @@
 
 import axios from "axios";
 
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { FaceMesh }
-  from "@mediapipe/face_mesh";
+import { FaceMesh } from "@mediapipe/face_mesh";
 
-import { toast }
-  from "react-hot-toast";
+import { toast } from "react-hot-toast";
 
-import {
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 interface Props {
   socket: any;
 }
 
-const InterviewPage = ({
-  socket,
-}: Props) => {
-
+const InterviewPage = ({ socket }: Props) => {
   // ==========================================
   // ROUTER
   // ==========================================
 
-  const { roomId } =
-    useParams();
+  const { roomId } = useParams();
 
-  const [searchParams] =
-    useSearchParams();
+  const [searchParams] = useSearchParams();
 
-  const interviewId =
-    searchParams.get(
-      "interviewId"
-    );
+  const interviewId = searchParams.get("interviewId");
+  const role = searchParams.get("role");
+
+  const isCandidate = role === "candidate";
 
   // ==========================================
   // STATES
   // ==========================================
 
-  const [questions,
-    setQuestions] =
-    useState<string[]>([]);
+  const [questions, setQuestions] = useState<string[]>([]);
 
-  const [currentIndex,
-    setCurrentIndex] =
-    useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const [currentQuestion,
-    setCurrentQuestion] =
-    useState("");
+  const [currentQuestion, setCurrentQuestion] = useState("");
 
-  const [candidateAnswer,
-    setCandidateAnswer] =
-    useState("");
+  const currentQuestionRef =
+  useRef("");
 
-  const [isListening,
-    setIsListening] =
-    useState(false);
+  const [candidateAnswer, setCandidateAnswer] = useState("");
 
-  const recognitionRef =
-    useRef<any>(null);
+  const [isListening, setIsListening] = useState(false);
 
-  const videoRef =
-    useRef<HTMLVideoElement>(null);
+  const recognitionRef = useRef<any>(null);
 
-  const processingRef =
-    useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const questionsRef =
-    useRef<string[]>([]);
+  const processingRef = useRef(false);
 
-  const movingNextRef =
-    useRef(false);
+  const questionsRef = useRef<string[]>([]);
 
-  const interviewEndedRef =
-    useRef(false);
 
-  const questionTimeoutRef =
-    useRef<any>(null);
+  const silenceTimeoutRef =
+  useRef<any>(null);
+
+
+  
+  
+
+  const movingNextRef = useRef(false);
+
+  const interviewEndedRef = useRef(false);
+
+  const questionTimeoutRef = useRef<any>(null);
+
+    const askingRef = useRef(false);
+
 
   // ==========================================
   // END INTERVIEW
   // ==========================================
 
-  const handleEndInterview =
-    () => {
+  const handleEndInterview = () => {
+    interviewEndedRef.current = true;
 
-      interviewEndedRef.current =
-        true;
+    clearTimeout(questionTimeoutRef.current);
 
-      clearTimeout(
-        questionTimeoutRef.current
-      );
+    socket.emit("end-interview", {
+      roomId,
+    });
 
-      socket.emit(
-        "end-interview",
-        {
-          roomId,
-        }
-      );
-
-      window.location.href =
-        `/code/${roomId}`;
-    };
+    window.location.href = `/code/${roomId}`;
+  };
 
   // ==========================================
   // AUTO START INTERVIEW
   // ==========================================
 
-  const hasStarted =
-    useRef(false);
+  const hasStarted = useRef(false);
 
   useEffect(() => {
+    if (!socket || !roomId) return;
 
-    if (
-      interviewId &&
-      !hasStarted.current
-    ) {
+    const handleJoin = () => {
+      console.log("👤 Candidate joining room:", roomId);
+      socket.emit("join", { roomId, color: "#3178c6" });
+    };
 
-      hasStarted.current =
-        true;
-
-      generateQuestions(
-        interviewId
-      );
+    if (socket.connected) {
+      handleJoin();
     }
 
+    socket.on("connect", handleJoin);
+
+    return () => {
+      socket.off("connect", handleJoin);
+    };
+  }, [socket, roomId]);
+
+  useEffect(() => {
+    if (interviewId && !hasStarted.current) {
+      hasStarted.current = true;
+
+      generateQuestions(interviewId);
+    }
   }, [interviewId]);
+
+  useEffect(() => {
+    if (!isCandidate) return;
+
+    const handleBlur = () => {
+      socket.emit("tab-inactive", {
+        roomId,
+
+        message: "Tab Switching Detected",
+      });
+    };
+
+    const handleFocus = () => {
+      socket.emit("tab-active", {
+        roomId,
+
+        message: "Returned To Interview",
+      });
+    };
+
+    window.addEventListener("blur", handleBlur);
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("blur", handleBlur);
+
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [socket, roomId, isCandidate]);
 
   // ==========================================
   // SAME STREAM
   // ==========================================
 
   useEffect(() => {
+    const stream = (window as any).interviewStream;
 
-    const stream =
-      (
-        window as any
-      ).interviewStream;
-
-    if (
-      stream &&
-      videoRef.current
-    ) {
-
-      videoRef.current.srcObject =
-        stream;
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
     }
-
   }, []);
 
   // ==========================================
@@ -165,896 +168,666 @@ const InterviewPage = ({
   // ==========================================
 
   useEffect(() => {
-
-    socket.on(
-      "end-interview",
-      ({
-        roomId,
-      }: {
-        roomId: string;
-      }) => {
-
-        window.location.href =
-          `/code/${roomId}`;
-      }
-    );
+    socket.on("end-interview", ({ roomId }: { roomId: string }) => {
+      window.location.href = `/code/${roomId}`;
+    });
 
     return () => {
-
-      socket.off(
-        "end-interview"
-      );
+      socket.off("end-interview");
     };
-
   }, [socket]);
 
+  useEffect(() => {
+    const onTabInactive = ({ message }: { message: string }) => {
+      toast(message, {
+        icon: "⚠️",
+      });
+    };
+
+    const onTabActive = ({ message }: { message: string }) => {
+      toast.success(message);
+    };
+
+    socket.on("user-tab-inactive", onTabInactive);
+
+    socket.on("user-tab-active", onTabActive);
+
+    return () => {
+      socket.off("user-tab-inactive", onTabInactive);
+
+      socket.off("user-tab-active", onTabActive);
+    };
+  }, [socket]);
   // ==========================================
   // GENERATE QUESTIONS
   // ==========================================
 
-  const generateQuestions =
-    async (
-      interviewId: string
-    ) => {
+  const generateQuestions = async (interviewId: string) => {
+    try {
+      const res = await axios.post(
+        `http://localhost:8000/question/askquestion/${interviewId}`,
 
-      try {
+        {
+          roomId,
+        },
 
-        const res =
-          await axios.post(
-            `http://localhost:8000/question/askquestion/${interviewId}`
-          );
+        {
+          withCredentials: true,
+        },
+      );
 
-        const generatedQuestions =
-          res.data.data.map(
-            (item: any) =>
-              item.question
-          );
+      const generatedQuestions = res.data.data.map(
+        (item: any) => item.question,
+      );
 
-        console.log(
-          "QUESTIONS:",
-          generatedQuestions
-        );
+      console.log("QUESTIONS:", generatedQuestions);
 
-        setQuestions(
-          generatedQuestions
-        );
+      setQuestions(generatedQuestions);
 
-        questionsRef.current =
-          generatedQuestions;
+      questionsRef.current = generatedQuestions;
 
-        startInterview(
-          generatedQuestions
-        );
-
-      } catch (error) {
-
-        console.log(
-          "API ERROR:",
-          error
-        );
-      }
-    };
+      startInterview(generatedQuestions);
+    } catch (error) {
+      console.log("API ERROR:", error);
+    }
+  };
 
   // ==========================================
   // START INTERVIEW
   // ==========================================
+  const interviewStartedRef = useRef(false);
 
-  const startInterview =
-    (
-      questionsData: string[]
-    ) => {
+  const startInterview = (questionsData: string[]) => {
+    if (interviewStartedRef.current) return;
 
-      window.speechSynthesis.cancel();
+    interviewStartedRef.current = true;
 
-      const utterance =
-        new SpeechSynthesisUtterance(
-          `
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(
+      `
 Namaskar.
 
-Welcome to Doctor Abinash Software Solution interview session.
+Welcome to MindBrain invations interview session.
 
 Please answer confidently.
 
 Best of luck.
-`
-        );
+`,
+    );
 
-      utterance.lang =
-        "en-US";
+    utterance.lang = "en-US";
 
-      utterance.rate =
-        0.9;
+    utterance.rate = 0.9;
 
-      utterance.pitch =
-        1;
+    utterance.pitch = 1;
 
-      utterance.volume =
-        1;
+    utterance.volume = 1;
 
-      utterance.onend =
-        () => {
-
-          askQuestion(
-            0,
-            questionsData
-          );
-        };
-
-      window.speechSynthesis.speak(
-        utterance
-      );
+    utterance.onend = () => {
+      askQuestion(0, questionsData);
     };
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   // ==========================================
   // START RECOGNITION
   // ==========================================
 
-  const startRecognition =
-    () => {
+  const startRecognition = () => {
+    if (interviewEndedRef.current) return;
 
-      if (
-        interviewEndedRef.current
-      ) return;
-
-      if (
-        recognitionRef.current
-      ) {
-
-        try {
-
-          recognitionRef.current.start();
-
-        } catch (err) {
-
-          console.log(
-            "Recognition already started"
-          );
-        }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.log("Recognition already started");
       }
-    };
+    }
+  };
 
   // ==========================================
   // SPEAK FUNCTION
   // ==========================================
 
-  const speak = (
-    text: string,
-    startListening =
-      false
-  ) => {
+ const speak = (
+  text: string,
+  startListening = false
+) => {
 
-    window.speechSynthesis.cancel();
+  // prevent double speak
+  if (askingRef.current) return;
 
-    const utterance =
-      new SpeechSynthesisUtterance(
-        text
-      );
+  askingRef.current = true;
 
-    utterance.lang =
-      "en-US";
+  // stop previous speech
+  window.speechSynthesis.cancel();
 
-    utterance.rate =
-      1;
+  const utterance =
+    new SpeechSynthesisUtterance(text);
 
-    utterance.pitch =
-      1;
+  utterance.lang = "en-US";
 
-    utterance.volume =
-      1;
+  utterance.rate = 1;
 
-    utterance.onend =
-      () => {
+  utterance.pitch = 1;
 
-        if (
-          startListening &&
-          !interviewEndedRef.current
-        ) {
+  utterance.volume = 1;
 
-          setTimeout(() => {
+  utterance.onend = () => {
 
-            startRecognition();
+    askingRef.current = false;
 
-          }, 700);
-        }
-      };
+    if (
+      startListening &&
+      !interviewEndedRef.current
+    ) {
 
-    window.speechSynthesis.speak(
-      utterance
-    );
+      setTimeout(() => {
+
+        startRecognition();
+
+      }, 500);
+    }
   };
+
+  window.speechSynthesis.speak(
+    utterance
+  );
+};
 
   // ==========================================
   // ASK QUESTION
   // ==========================================
 
-  const askQuestion = (
-    index: number,
-    questionsData: string[]
-  ) => {
+ const askQuestion = (
+  index: number,
+  questionsData: string[]
+) => {
 
-    // clear old timeout
+  if (
+    askingRef.current ||
+    interviewEndedRef.current
+  ) return;
+
+  clearTimeout(
+    questionTimeoutRef.current
+  );
+
+  if (
+    index >= questionsData.length
+  ) {
+
+    interviewEndedRef.current = true;
+
+    speak(`
+Interview completed.
+Thank you.
+`);
+
+    return;
+  }
+
+  const question =
+    questionsData[index];
+
+  console.log(
+    "ASKING:",
+    question
+  );
+
+setCurrentQuestion(question);
+
+currentQuestionRef.current =
+  question;
+
+  speak(question, true);
+
+  questionTimeoutRef.current =
+    setTimeout(() => {
+
+      if (
+        !movingNextRef.current &&
+        !interviewEndedRef.current
+      ) {
+
+        nextQuestion();
+      }
+
+    }, 20000);
+};
+
+  // ==========================================
+  // NEXT QUESTION
+  // ==========================================
+
+  const nextQuestion = () => {
+
+  if (
+    interviewEndedRef.current
+  ) return;
+
+  setCurrentIndex((prev) => {
+
+    const nextIndex =
+      prev + 1;
+
+    console.log(
+      "NEXT INDEX:",
+      nextIndex
+    );
+
     if (
-      questionTimeoutRef.current
-    ) {
-
-      clearTimeout(
-        questionTimeoutRef.current
-      );
-    }
-
-    if (
-      index >=
-      questionsData.length
+      nextIndex >=
+      questionsRef.current.length
     ) {
 
       interviewEndedRef.current =
         true;
 
-      window.speechSynthesis.cancel();
+      clearTimeout(
+        questionTimeoutRef.current
+      );
 
       speak(`
 Interview completed.
 Thank you.
 `);
 
-      return;
+      return prev;
     }
 
-    const question =
-      questionsData[index];
+    setTimeout(() => {
 
-    console.log(
-      "ASKING:",
-      question
-    );
-
-    setCurrentQuestion(
-      question
-    );
-
-    speak(
-      question,
-      true
-    );
-
-    // auto next after 20 sec
-    questionTimeoutRef.current =
-      setTimeout(() => {
-
-        if (
-          !movingNextRef.current &&
-          !interviewEndedRef.current
-        ) {
-
-          console.log(
-            "TIME OUT NEXT QUESTION"
-          );
-
-          nextQuestion();
-        }
-
-      }, 20000);
-  };
-
-  // ==========================================
-  // NEXT QUESTION
-  // ==========================================
-
-  const nextQuestion =
-    () => {
-
-      if (
-        movingNextRef.current
-      ) return;
-
-      movingNextRef.current =
-        true;
-
-      setCurrentIndex(
-        (prev) => {
-
-          const nextIndex =
-            prev + 1;
-
-          console.log(
-            "NEXT INDEX:",
-            nextIndex
-          );
-
-          if (
-            nextIndex >=
-            questionsRef.current.length
-          ) {
-
-            interviewEndedRef.current =
-              true;
-
-            clearTimeout(
-              questionTimeoutRef.current
-            );
-
-            speak(`
-Interview completed.
-Thank you.
-`);
-
-            return prev;
-          }
-
-          askQuestion(
-            nextIndex,
-            questionsRef.current
-          );
-
-          return nextIndex;
-        }
+      askQuestion(
+        nextIndex,
+        questionsRef.current
       );
 
-      setTimeout(() => {
+    }, 500);
 
-        movingNextRef.current =
-          false;
-
-      }, 2000);
-    };
+    return nextIndex;
+  });
+};
 
   // ==========================================
   // SPEECH RECOGNITION
   // ==========================================
 
   useEffect(() => {
-
     const SpeechRecognition =
-      (
-        window as any
-      ).SpeechRecognition ||
-      (
-        window as any
-      ).webkitSpeechRecognition;
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-
-      alert(
-        "Speech Recognition Not Supported"
-      );
+      alert("Speech Recognition Not Supported");
 
       return;
     }
 
-    const recognition =
-      new SpeechRecognition();
+    const recognition = new SpeechRecognition();
 
-    recognition.lang =
-      "en-US";
+  recognition.lang = "en-IN";
 
     // ==========================================
     // EDGE + CHROME SUPPORT
     // ==========================================
 
-    const isEdge =
-      navigator.userAgent
-        .includes("Edg");
+    const isEdge = navigator.userAgent.includes("Edg");
 
     if (isEdge) {
+      recognition.continuous = false;
 
-      recognition.continuous =
-        false;
-
-      recognition.interimResults =
-        true;
-
+      recognition.interimResults = true;
     } else {
+      recognition.continuous = true;
 
-      recognition.continuous =
-        true;
-
-      recognition.interimResults =
-        false;
+   recognition.interimResults = true;
     }
 
-    recognition.maxAlternatives =
-      1;
+    recognition.maxAlternatives = 1;
 
     // ==========================================
     // START
     // ==========================================
 
-    recognition.onstart =
-      () => {
+    recognition.onstart = () => {
+      console.log("LISTENING...");
 
-        console.log(
-          "LISTENING..."
-        );
-
-        setIsListening(
-          true
-        );
-      };
+      setIsListening(true);
+    };
 
     // ==========================================
     // END
     // ==========================================
 
-    recognition.onend =
-      () => {
+    recognition.onend = () => {
+      console.log("RECOGNITION ENDED");
 
-        console.log(
-          "RECOGNITION ENDED"
-        );
-
-        setIsListening(
-          false
-        );
-
-        // auto restart
-        if (
-          !movingNextRef.current &&
-          !interviewEndedRef.current
-        ) {
-
-          setTimeout(() => {
-
-            startRecognition();
-
-          }, 800);
-        }
-      };
+      setIsListening(false);
+    };
 
     // ==========================================
     // ERROR
     // ==========================================
 
-    recognition.onerror =
-      (event: any) => {
+    recognition.onerror = (event: any) => {
+      console.log("Speech Error:", event.error);
 
-        console.log(
-          "Speech Error:",
-          event.error
-        );
+      setIsListening(false);
 
-        setIsListening(
-          false
-        );
+      // no speech
+      // if (
+      //   event.error ===
+      //   "no-speech"
+      // ) {
 
-        // no speech
-        if (
-          event.error ===
-          "no-speech"
-        ) {
+      //   clearTimeout(
+      //     questionTimeoutRef.current
+      //   );
 
-          clearTimeout(
-            questionTimeoutRef.current
-          );
+      //   if (
+      //     !movingNextRef.current
+      //   ) {
 
-          if (
-            !movingNextRef.current
-          ) {
+      //     setTimeout(() => {
 
-            setTimeout(() => {
+      //       nextQuestion();
 
-              nextQuestion();
+      //     }, 1000);
+      //   }
+      // }
 
-            }, 1000);
-          }
-        }
+      // // network issue
+      // else if (
+      //   event.error ===
+      //   "network"
+      // ) {
 
-        // network issue
-        else if (
-          event.error ===
-          "network"
-        ) {
+      //   setTimeout(() => {
 
-          setTimeout(() => {
+      //     startRecognition();
 
-            startRecognition();
-
-          }, 1000);
-        }
-      };
+      //   }, 1000);
+      // }
+      if (event.error === "no-speech") {
+        console.log("No speech detected");
+      }
+    };
 
     // ==========================================
     // RESULT
     // ==========================================
 
-    recognition.onresult =
-      (
-        event: any
-      ) => {
+recognition.onresult =
+  (event: any) => {
 
-        clearTimeout(
-          questionTimeoutRef.current
-        );
+    if (
+      movingNextRef.current
+    ) return;
 
-        const last =
-          event.results.length - 1;
+    clearTimeout(
+      questionTimeoutRef.current
+    );
 
-        const transcript =
-          event.results[last][0]
-            .transcript;
+    let transcript = "";
 
-        console.log(
-          "ANSWER:",
-          transcript
-        );
+    for (
+      let i = event.resultIndex;
+      i < event.results.length;
+      ++i
+    ) {
 
-        setCandidateAnswer(
-          transcript
-        );
+      transcript +=
+        event.results[i][0]
+          .transcript;
+    }
 
-        if (
-          recognitionRef.current
-        ) {
+    transcript =
+      transcript.trim();
 
-          recognitionRef.current.stop();
-        }
+    console.log(
+      "EMITTING ANSWER"
+    );
 
-        setTimeout(() => {
+    socket.emit(
+      "candidate-answer",
+      {
+        roomId,
+        interviewId,
 
-          nextQuestion();
+        question:
+          currentQuestionRef.current,
 
-        }, 1000);
-      };
+        answer:
+          transcript,
+      }
+    );
 
-    recognitionRef.current =
-      recognition;
+    console.log(
+      "ANSWER:",
+      transcript
+    );
 
+    setCandidateAnswer(
+      transcript
+    );
+
+   // recognition.stop();
+
+// CLEAR OLD SILENCE TIMER
+clearTimeout(
+  silenceTimeoutRef.current
+);
+
+// WAIT FOR USER TO STOP SPEAKING
+silenceTimeoutRef.current =
+  setTimeout(() => {
+
+    recognition.stop();
+
+    movingNextRef.current =
+      true;
+
+    nextQuestion();
+
+    movingNextRef.current =
+      false;
+
+  }, 3000);
+  };
+
+    recognitionRef.current = recognition;
   }, []);
 
-  // ==========================================
-  // FACEMESH
-  // ==========================================
+  useEffect(() => {
+    const video = videoRef.current;
 
-// ==========================================
-// FACEMESH + DB STORE
-// ==========================================
+    if (!video) return;
 
-// ==========================================
-// FACEMESH + TRACK TIME + DB STORE
-// ==========================================
+    const startTracking = async () => {
+      video.onloadedmetadata = async () => {
+        const faceMesh = new FaceMesh({
+          locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+          },
+        });
 
-useEffect(() => {
+        faceMesh.setOptions({
+          maxNumFaces: 5,
 
-  const video =
-    videoRef.current;
+          refineLandmarks: true,
 
-  if (!video) return;
+          minDetectionConfidence: 0.5,
 
-  const startTracking =
-    async () => {
+          minTrackingConfidence: 0.5,
+        });
 
-      video.onloadedmetadata =
-        async () => {
+        let previousNoseX: number | null = null;
 
-          const faceMesh =
-            new FaceMesh({
+        let lastEyeViolation = 0;
 
-              locateFile:
-                (file) => {
+        let lastWarningTime = 0;
 
-                  return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-                },
+        const showToast = (message: string) => {
+          const now = Date.now();
+
+          if (now - lastWarningTime > 2000) {
+            lastWarningTime = now;
+
+            toast.error(message);
+          }
+        };
+
+        faceMesh.onResults((results) => {
+          const faces = results.multiFaceLandmarks;
+
+          // ==========================================
+          // NO FACE
+          // ==========================================
+
+          if (!faces || faces.length === 0) {
+            showToast("No Face Detected");
+
+            socket.emit("track-time", {
+              roomId,
+
+              userId: socket.id,
+
+              username: "Candidate",
+
+              type: "no_face_detected",
             });
 
-          faceMesh.setOptions({
+            return;
+          }
 
-            maxNumFaces: 5,
 
-            refineLandmarks:
-              true,
+          if (faces.length >= 2) {
+            showToast("Multiple Faces Detected");
 
-            minDetectionConfidence:
-              0.5,
+            socket.emit("track-time", {
+              roomId,
 
-            minTrackingConfidence:
-              0.5,
-          });
+              userId: socket.id,
 
-          let previousNoseX:
-            number | null =
-            null;
+              username: "Candidate",
 
-          let lastEyeViolation =
-            0;
+              type: "multiple_faces",
+            });
 
-          let lastWarningTime =
-            0;
+            return;
+          }
 
-          const showToast =
-            (
-              message: string
-            ) => {
+          const landmarks = faces[0];
 
-              const now =
-                Date.now();
+          // ==========================================
+          // HEAD MOVEMENT
+          // ==========================================
 
-              if (
-                now -
-                lastWarningTime >
-                2000
-              ) {
+          const nose = landmarks[1];
 
-                lastWarningTime =
-                  now;
+          if (previousNoseX !== null) {
+            const diff = Math.abs(nose.x - previousNoseX);
 
-                toast.error(
-                  message
-                );
-              }
-            };
+            if (diff > 0.03) {
+              showToast("Head Movement");
 
-          faceMesh.onResults(
-            (results) => {
+              socket.emit("track-time", {
+                roomId,
 
-              const faces =
-                results.multiFaceLandmarks;
+                userId: socket.id,
 
-              // ==========================================
-              // NO FACE
-              // ==========================================
+                username: "Candidate",
 
-              if (
-                !faces ||
-                faces.length === 0
-              ) {
-
-                showToast(
-                  "No Face Detected"
-                );
-
-                socket.emit(
-                  "track-time",
-                  {
-                    roomId,
-
-                    userId:
-                      socket.id,
-
-                    username:
-                      "Candidate",
-
-                    type:
-                      "no_face_detected",
-                  }
-                );
-
-                return;
-              }
-
-              // ==========================================
-              // MULTIPLE FACE
-              // ==========================================
-
-              if (
-                faces.length >= 2
-              ) {
-
-                showToast(
-                  "Multiple Faces Detected"
-                );
-
-                socket.emit(
-                  "track-time",
-                  {
-                    roomId,
-
-                    userId:
-                      socket.id,
-
-                    username:
-                      "Candidate",
-
-                    type:
-                      "multiple_faces",
-                  }
-                );
-
-                return;
-              }
-
-              const landmarks =
-                faces[0];
-
-              // ==========================================
-              // HEAD MOVEMENT
-              // ==========================================
-
-              const nose =
-                landmarks[1];
-
-              if (
-                previousNoseX !==
-                null
-              ) {
-
-                const diff =
-                  Math.abs(
-                    nose.x -
-                    previousNoseX
-                  );
-
-                if (
-                  diff > 0.03
-                ) {
-
-                  showToast(
-                    "Head Movement"
-                  );
-
-                  socket.emit(
-                    "track-time",
-                    {
-                      roomId,
-
-                      userId:
-                        socket.id,
-
-                      username:
-                        "Candidate",
-
-                      type:
-                        "head_movement",
-                    }
-                  );
-                }
-              }
-
-              previousNoseX =
-                nose.x;
-
-              // ==========================================
-              // EYE TRACKING
-              // ==========================================
-
-              const leftEyeLeft =
-                landmarks[33];
-
-              const leftEyeRight =
-                landmarks[133];
-
-              const leftIris =
-                landmarks[468];
-
-              const eyeWidth =
-                leftEyeRight.x -
-                leftEyeLeft.x;
-
-              const irisPosition =
-                (
-                  leftIris.x -
-                  leftEyeLeft.x
-                ) / eyeWidth;
-
-              const now =
-                Date.now();
-
-              // ==========================================
-              // LOOKING LEFT
-              // ==========================================
-
-              if (
-                irisPosition <
-                  0.40 &&
-                now -
-                  lastEyeViolation >
-                  1500
-              ) {
-
-                lastEyeViolation =
-                  now;
-
-                showToast(
-                  "Looking Left"
-                );
-
-                socket.emit(
-                  "track-time",
-                  {
-                    roomId,
-
-                    userId:
-                      socket.id,
-
-                    username:
-                      "Candidate",
-
-                    type:
-                      "looking_left",
-                  }
-                );
-              }
-
-              // ==========================================
-              // LOOKING RIGHT
-              // ==========================================
-
-              else if (
-                irisPosition >
-                  0.60 &&
-                now -
-                  lastEyeViolation >
-                  1500
-              ) {
-
-                lastEyeViolation =
-                  now;
-
-                showToast(
-                  "Looking Right"
-                );
-
-                socket.emit(
-                  "track-time",
-                  {
-                    roomId,
-
-                    userId:
-                      socket.id,
-
-                    username:
-                      "Candidate",
-
-                    type:
-                      "looking_right",
-                  }
-                );
-              }
+                type: "head_movement",
+              });
             }
-          );
+          }
 
-          const interval =
-            setInterval(
-              async () => {
+          previousNoseX = nose.x;
 
-                if (
-                  video.readyState >=
-                    2 &&
-                  !processingRef.current
-                ) {
+          // ==========================================
+          // EYE TRACKING
+          // ==========================================
 
-                  try {
+          const leftEyeLeft = landmarks[33];
 
-                    processingRef.current =
-                      true;
+          const leftEyeRight = landmarks[133];
 
-                    await faceMesh.send(
-                      {
-                        image:
-                          video,
-                      }
-                    );
+          const leftIris = landmarks[468];
 
-                  } catch (err) {
+          const eyeWidth = leftEyeRight.x - leftEyeLeft.x;
 
-                    console.log(
-                      err
-                    );
+          const irisPosition = (leftIris.x - leftEyeLeft.x) / eyeWidth;
 
-                  } finally {
+          const now = Date.now();
 
-                    processingRef.current =
-                      false;
-                  }
-                }
+          // ==========================================
+          // LOOKING LEFT
+          // ==========================================
 
-              },
-              1000
-            );
+          if (irisPosition < 0.4 && now - lastEyeViolation > 1500) {
+            lastEyeViolation = now;
 
-          return () => {
+            showToast("Looking Left");
 
-            clearInterval(
-              interval
-            );
-          };
+            socket.emit("track-time", {
+              roomId,
+
+              userId: socket.id,
+
+              username: "Candidate",
+
+              type: "looking_left",
+            });
+          }
+
+          // ==========================================
+          // LOOKING RIGHT
+          // ==========================================
+          else if (irisPosition > 0.6 && now - lastEyeViolation > 1500) {
+            lastEyeViolation = now;
+
+            showToast("Looking Right");
+
+            socket.emit("track-time", {
+              roomId,
+
+              userId: socket.id,
+
+              username: "Candidate",
+
+              type: "looking_right",
+            });
+          }
+        });
+
+        const interval = setInterval(async () => {
+          if (video.readyState >= 2 && !processingRef.current) {
+            try {
+              processingRef.current = true;
+
+              await faceMesh.send({
+                image: video,
+              });
+            } catch (err) {
+              console.log(err);
+            } finally {
+              processingRef.current = false;
+            }
+          }
+        }, 1000);
+
+        return () => {
+          clearInterval(interval);
         };
+      };
     };
 
-  startTracking();
-
-}, [
-  socket,
-  roomId,
-]);
+    startTracking();
+  }, [socket, roomId]);
 
   return (
     <div
@@ -1069,7 +842,6 @@ useEffect(() => {
         px-6
       "
     >
-
       <h1
         className="
           text-5xl
@@ -1109,7 +881,6 @@ useEffect(() => {
           backdrop-blur-lg
         "
       >
-
         <h2
           className="
             text-xl
@@ -1143,11 +914,7 @@ useEffect(() => {
           text-lg
         "
       >
-        {
-          isListening
-            ? "🎤 Listening..."
-            : "🤖 AI Speaking..."
-        }
+        {isListening ? "🎤 Listening..." : "🤖 AI Speaking..."}
       </div>
 
       <div
@@ -1162,7 +929,6 @@ useEffect(() => {
           p-6
         "
       >
-
         <h3
           className="
             text-lg
@@ -1185,9 +951,7 @@ useEffect(() => {
       </div>
 
       <button
-        onClick={
-          handleEndInterview
-        }
+        onClick={handleEndInterview}
         className="
           mt-10
           px-8

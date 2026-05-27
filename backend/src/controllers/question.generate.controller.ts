@@ -2,6 +2,7 @@ import { Request,Response } from "express";
 import { JD } from "../model/jd.model.ts";
 //import { model } from "../config/gemini.config.ts";
 import { createQuestionPrompt } from "../utils/prompt.ts";
+import { Interview } from "../model/interview.model.ts";
 
 
 // export const generateQuestionController =async(req:Request,res:Response)=>{
@@ -98,16 +99,21 @@ import { createQuestionPrompt } from "../utils/prompt.ts";
 //  }
 // }
 
+
 import { groq } from "../config/Grok.config.ts"
+
+import { AuthRequest } from "../types/express.ts";
 
 
 export const generateQuestionController = async (
-  req: Request,
+  req: AuthRequest,
   res: Response
 ) => {
   try {
 
     const { jdid } = req.params;
+    const {roomId}=req.body
+ 
 
     if (!jdid) {
       return res.status(400).json({
@@ -176,12 +182,39 @@ export const generateQuestionController = async (
     jd.generatedQuestions = allQuestions as any;
 
     await jd.save();
+    if (!req.user) {
 
-    return res.status(200).json({
-      success: true,
-      data: jd.generatedQuestions,
-    });
+  return res.status(401).json({
 
+    success: false,
+
+    message: "Unauthorized",
+  });
+}
+ const interview =
+  await Interview.create({
+
+    jdId: jd._id,
+
+    candidateId:
+      req.user.id,
+
+    roomId:roomId
+  });
+
+
+   return res.status(200).json({
+
+  success: true,
+
+  data:
+    jd.generatedQuestions,
+
+  interviewId:
+    interview._id,
+
+  roomId,
+});
   } catch (error: any) {
 
     console.log(error);
