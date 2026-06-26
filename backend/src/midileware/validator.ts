@@ -15,6 +15,8 @@ export const isValiduser = async (
   next: NextFunction
 ) => {
   try {
+     console.log("COOKIES =", req.cookies);
+  console.log("HEADER =", req.headers.cookie);
     const token = req.cookies.accesstoken;
 
     if (!token) {
@@ -49,4 +51,4 @@ export const isValiduser = async (
       error,
     });
   }
-};
+};
