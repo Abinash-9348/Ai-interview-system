@@ -17,6 +17,12 @@ export const initsocket = () => {
     transports: ["websocket"],
     reconnection: true,
     reconnectionAttempts: 5,
+
+
+
+
+
+    
     reconnectionDelay: 1000,
   });
 
