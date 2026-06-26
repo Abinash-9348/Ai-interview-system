@@ -1,24 +1,30 @@
 import { Request,Response } from "express";
 import { createRoomServices , getRoomService, joinRoomServices, lockedRoom, unlockroom } from "../services/room.services.ts";
 
-export const createRoomController = async (req: Request, res: Response) => {
+export const createRoomController = async (req:Request, res:Response) => {
+
   try {
-    const data= req.body;
-    const room = await createRoomServices(data);
+
+    const room = await createRoomServices({
+      language: req.body.language,
+      user: req.user
+    })
 
     return res.status(201).json({
       success: true,
-      message: "Room created successfully",
       room
-    });
+    })
 
-  } catch (error) {
+  } catch (error:any) {
+
+    console.log("CREATE ROOM ERROR:", error)
+
     return res.status(500).json({
-      success: false,
-      message: "Room creation failed"
-    });
+      success:false,
+      message:error.message
+    })
   }
-};
+}
 
 export  const joinRoomController = async(req:Request,res:Response) =>{
     try {
