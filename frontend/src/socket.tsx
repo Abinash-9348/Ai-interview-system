@@ -12,7 +12,7 @@ export const initsocket = () => {
     return socket;
   }
 
-  socket = io("http://localhost:8000", {
+  socket = io("https://ai-interview-system-5gbg.onrender.com", {
     withCredentials: true,
     transports: ["websocket"],
     reconnection: true,
@@ -29,4 +29,4 @@ export const initsocket = () => {
   });
 
   return socket;
-};
+};

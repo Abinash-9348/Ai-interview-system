@@ -16,7 +16,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-const BASE_URL = "http://localhost:8000";
+const BASE_URL = "https://ai-interview-system-5gbg.onrender.com";
 
 export default function LoginPage() {
   const navigate = useNavigate();

@@ -209,7 +209,7 @@ const InterviewPage = ({ socket }: Props) => {
   const generateQuestions = async (interviewId: string) => {
     try {
       const res = await axios.post(
-        `http://localhost:8000/question/askquestion/${interviewId}`,
+        `https://ai-interview-system-5gbg.onrender.com/question/askquestion/${interviewId}`,
 
         {
           roomId,

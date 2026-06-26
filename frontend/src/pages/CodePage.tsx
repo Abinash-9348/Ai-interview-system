@@ -464,8 +464,8 @@ export default function CodePage() {
   const handleLockRoom = async () => {
     try {
       const endpoint = isLocked
-        ? "http://localhost:8000/room/unlocked"
-        : "http://localhost:8000/room/locked";
+        ? "https://ai-interview-system-5gbg.onrender.com/room/unlocked"
+        : "https://ai-interview-system-5gbg.onrender.com/room/locked";
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -508,7 +508,7 @@ export default function CodePage() {
     setIsLoading(true);
     setOutput("Running code...");
     try {
-      const response = await fetch("http://localhost:8000/code/run", {
+      const response = await fetch("https://ai-interview-system-5gbg.onrender.com/code/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ roomId, code, language, input: "" }),

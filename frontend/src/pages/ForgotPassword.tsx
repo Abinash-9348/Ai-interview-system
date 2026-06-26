@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
       setLoading(true);
 
       const response = await fetch(
-        "http://localhost:8000/user/forgotpassword",
+        "https://ai-interview-system-5gbg.onrender.com/user/forgotpassword",
         {
           method: "POST",
 

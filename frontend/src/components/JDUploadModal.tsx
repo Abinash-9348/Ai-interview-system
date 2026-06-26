@@ -40,7 +40,7 @@ export default function JDUploadModal({
       formData.append("jd", selectedFile);
 
       const response = await fetch(
-        "http://localhost:8000/jd/upload",
+        "https://ai-interview-system-5gbg.onrender.com/jd/upload",
         {
           method: "POST",
           body: formData,

@@ -44,7 +44,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     const response = await fetch(
-      "http://localhost:8000/user/create",
+      "https://ai-interview-system-5gbg.onrender.com/user/create",
       {
         method: "POST",
 
