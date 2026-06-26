@@ -42,10 +42,10 @@ export const loginUserController = async(req:Request,res:Response)=>{
          {
             httpOnly:true,
             secure:false,
-            sameSite:"lax"
+            sameSite:"none"
          }
       )
-      res.cookie("refreshtoken",loginData.refreshToken,{httpOnly:true,secure:false,sameSite:"lax"})
+      res.cookie("refreshtoken",loginData.refreshToken,{httpOnly:true,secure:false,sameSite:"none"})
         return res.status(200).json({msg:"login sucessfully",loginData})
    
    } catch (error:any) {
