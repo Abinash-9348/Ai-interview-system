@@ -41,7 +41,12 @@ export const initSocket = (io: Server) => {
   io.use((socket: Socket, next) => {
     try {
       const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+         console.log("SOCKET COOKIES =", cookies);
       const token = cookies.accesstoken;
+         console.log(
+    "TOKEN =>",
+    token
+  );
 
       if (!token) {
         return next(new Error("Unauthorized"));
