@@ -1,4 +1,5 @@
 import { Server, Socket } from "socket.io";
+import mongoose from "mongoose";
 import { Message } from "../model/meessage.model.ts";
 import { Room } from "../model/room.model.ts";
 import { Violation } from "../model/violation.model.ts";
@@ -6,6 +7,7 @@ import jwt from 'jsonwebtoken'
 import cookie from 'cookie';
 import { InterviewResult } from "../model/interview.result.ts";
 import { Interview } from "../model/interview.model.ts";
+import { evaluateAnswerInBackground, runFinalEvaluationInBackground } from "../utils/backgroundEvaluator.ts";
 
 
 interface JwtPayload {
@@ -358,7 +360,7 @@ socket.on(
         };
 
         if (fieldMap[type]) {
-          updateFields.$inc = { [fieldMap[type]]: duration };
+          updateFields.$inc = { [fieldMap[type]]: duration  || 1};
         }
 
         await Violation.findOneAndUpdate(
@@ -408,12 +410,18 @@ socket.on(
         );
         socket.on(
   "end-interview",
-  (data) => {
+  async (data) => {
+    const user = socket.data.user as JwtPayload;
 
     io.emit(
       "end-interview",
       data
     );
+
+    // SILENT BACKGROUND FINAL EVALUATION
+    if (data.roomId && user?.id) {
+      runFinalEvaluationInBackground(data.roomId, user.id);
+    }
   }
 );
 
@@ -425,39 +433,64 @@ socket.on(
     interviewId,
     question,
     answer,
+    timeTaken,
+    wordCount,
   }) => {
 
+    console.log(`[SOCKET] 📥 candidate-answer received for roomId: "${roomId}", interviewId: "${interviewId}"`);
     try {
       const user = socket.data.user as JwtPayload;
+      if (!user || !user.id) {
+        console.error("[SOCKET] ❌ Unauthorized: socket.data.user is missing or does not have an ID");
+        return;
+      }
 
-      // FIND RESULT BY interviewId OR roomId
+      const isValidObjectId = (id: any) => id && mongoose.Types.ObjectId.isValid(id);
+
+      // FIND RESULT BY interviewId OR roomId + candidateId
       let result = null;
-      if (interviewId) {
+      if (isValidObjectId(interviewId)) {
+        console.log(`[SOCKET] 🔍 Looking up InterviewResult by interviewId: "${interviewId}"`);
         result = await InterviewResult.findOne({ interviewId });
       }
-      if (!result) {
-        result = await InterviewResult.findOne({ roomId });
+
+      if (!result && roomId) {
+        const queryObj: any = { roomId };
+        if (isValidObjectId(user.id)) {
+          queryObj.candidateId = user.id;
+        }
+        console.log(`[SOCKET] 🔍 Looking up InterviewResult by roomId: "${roomId}" and candidateId: "${user.id}"`);
+        result = await InterviewResult.findOne(queryObj);
       }
 
       // CHECK AND CREATE
       if (!result) {
-        console.log("InterviewResult not found, creating new one...");
-        let candidateId = user?.id;
+        console.log("[SOCKET] 🆕 InterviewResult not found in DB. Creating a new document...");
+        let finalCandidateId = user.id;
 
         // Try to fetch candidateId from Interview if available
-        if (interviewId) {
+        if (isValidObjectId(interviewId)) {
           const interview = await Interview.findById(interviewId);
           if (interview) {
-            candidateId = interview.candidateId?.toString();
+            finalCandidateId = interview.candidateId?.toString() || user.id;
+            console.log(`[SOCKET] ℹ️ Fetched candidateId from associated Interview: "${finalCandidateId}"`);
           }
         }
 
-        result = await InterviewResult.create({
-          interviewId,
-          candidateId,
+        const createPayload: any = {
+          candidateId: finalCandidateId,
           roomId,
           answers: [],
-        });
+        };
+
+        if (isValidObjectId(interviewId)) {
+          createPayload.interviewId = interviewId;
+        }
+
+        result = await InterviewResult.create(createPayload);
+        console.log(`[SOCKET] 💾 Successfully created new InterviewResult document: ${result._id}`);
+      } else {
+        console.log(`[SOCKET] ℹ️ Found existing InterviewResult: ${result._id}`);
       }
 
       // Upsert answer to avoid duplicates of the same question
@@ -465,11 +498,14 @@ socket.on(
         (a: any) => a.question === question
       );
 
-      const wordCount = answer ? answer.trim().split(/\s+/).filter(Boolean).length : 0;
+      const wordCountVal = wordCount !== undefined ? wordCount : (answer ? answer.trim().split(/\s+/).filter(Boolean).length : 0);
+      const timeTakenVal = timeTaken !== undefined ? timeTaken : 0;
 
       if (existingAnswerIndex !== -1) {
         result.answers[existingAnswerIndex].answer = answer;
-        result.answers[existingAnswerIndex].wordCount = wordCount;
+        result.answers[existingAnswerIndex].wordCount = wordCountVal;
+        result.answers[existingAnswerIndex].timeTaken = timeTakenVal;
+        console.log(`[SOCKET] 📝 Updated existing answer for question: "${question.substring(0, 40)}..."`);
       } else {
         result.answers.push({
           question,
@@ -477,17 +513,22 @@ socket.on(
           technicalScore: 0,
           communicationScore: 0,
           confidenceScore: 0,
+          accuracyScore: 0,
+          clarityScore: 0,
           feedback: "",
           correctAnswer: "",
-          timeTaken: 0,
-          wordCount,
+          timeTaken: timeTakenVal,
+          wordCount: wordCountVal,
         });
+        console.log(`[SOCKET] ➕ Added new answer for question: "${question.substring(0, 40)}..."`);
       }
 
       // SAVE
       await result.save();
+      console.log(`[SOCKET] ✅ Candidate Answer Saved successfully in DB for room: ${roomId}`);
 
-      console.log(`✅ Candidate Answer Saved/Updated in DB for room: ${roomId}, interview: ${interviewId}`);
+      // SILENT BACKGROUND EVALUATION — fire and forget
+      evaluateAnswerInBackground(result._id.toString(), question, answer);
 
     } catch (error) {
       console.error("❌ Error in candidate-answer socket handler:", error);

@@ -47,6 +47,10 @@ const InterviewPage = ({ socket }: Props) => {
 
   const [isListening, setIsListening] = useState(false);
 
+
+
+  const questionStartTimeRef = useRef<number>(0);
+
   const recognitionRef = useRef<any>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -245,10 +249,7 @@ const InterviewPage = ({ socket }: Props) => {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(
-      `
-Namaskar.
-
-Welcome to MindBrain invations interview session.
+      `Welcome to MindBrain invations interview session.
 
 Please answer confidently.
 
@@ -361,13 +362,16 @@ Best of luck.
 
     interviewEndedRef.current = true;
 
-    speak(`
-Interview completed.
-Thank you.
-`);
+    speak("Interview completed. Thank you.");
+
+    setTimeout(() => {
+      socket.emit("end-interview", { roomId });
+      window.location.href = `/code/${roomId}`;
+    }, 3000);
 
     return;
   }
+
 
   const question =
     questionsData[index];
@@ -383,6 +387,8 @@ currentQuestionRef.current =
   question;
 
   speak(question, true);
+
+  questionStartTimeRef.current = Date.now();
 
   questionTimeoutRef.current =
     setTimeout(() => {
@@ -430,10 +436,12 @@ currentQuestionRef.current =
         questionTimeoutRef.current
       );
 
-      speak(`
-Interview completed.
-Thank you.
-`);
+      speak("Interview completed. Thank you.");
+
+      setTimeout(() => {
+        socket.emit("end-interview", { roomId });
+        window.location.href = `/code/${roomId}`;
+      }, 3000);
 
       return prev;
     }
@@ -486,7 +494,7 @@ Thank you.
    recognition.interimResults = true;
     }
 
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 5;
 
     // ==========================================
     // START
@@ -500,13 +508,39 @@ Thank you.
 
     // ==========================================
     // END
-    // ==========================================
+    // =========================================
+recognition.onend = () => {
 
-    recognition.onend = () => {
-      console.log("RECOGNITION ENDED");
+  console.log(
+    "RECOGNITION ENDED"
+  );
 
-      setIsListening(false);
-    };
+  setIsListening(false);
+
+  // AUTO RESTART
+  if (
+    !interviewEndedRef.current &&
+    !movingNextRef.current
+  ) {
+
+    setTimeout(() => {
+
+      try {
+
+        recognition.start();
+
+      } catch (err) {
+
+        console.log(
+          "Restart Error"
+        );
+      }
+
+    }, 500);
+  }
+};
+
+
 
     // ==========================================
     // ERROR
@@ -560,6 +594,16 @@ Thank you.
     // RESULT
     // ==========================================
 
+
+
+
+
+// ==========================================
+// RESULT
+// ==========================================
+
+let finalTranscript = "";
+
 recognition.onresult =
   (event: any) => {
 
@@ -571,71 +615,150 @@ recognition.onresult =
       questionTimeoutRef.current
     );
 
-    let transcript = "";
+    let interimTranscript =
+      "";
 
     for (
       let i = event.resultIndex;
       i < event.results.length;
-      ++i
+      i++
     ) {
 
-      transcript +=
-        event.results[i][0]
-          .transcript;
+      const result =
+        event.results[i];
+
+      const transcript =
+        result[0].transcript;
+
+      // FINAL SPEECH
+      if (result.isFinal) {
+
+        finalTranscript +=
+          transcript + " ";
+
+      } else {
+
+        interimTranscript +=
+          transcript;
+      }
     }
 
-    transcript =
-      transcript.trim();
-
-    console.log(
-      "EMITTING ANSWER"
-    );
-
-    socket.emit(
-      "candidate-answer",
-      {
-        roomId,
-        interviewId,
-
-        question:
-          currentQuestionRef.current,
-
-        answer:
-          transcript,
-      }
-    );
-
-    console.log(
-      "ANSWER:",
-      transcript
-    );
-
+    // LIVE UI
     setCandidateAnswer(
-      transcript
+
+      finalTranscript +
+      interimTranscript
     );
 
-   // recognition.stop();
+    // CLEAR OLD TIMER
+    clearTimeout(
+      silenceTimeoutRef.current
+    );
 
-// CLEAR OLD SILENCE TIMER
-clearTimeout(
-  silenceTimeoutRef.current
-);
+    // WAIT FOR USER TO STOP SPEAKING
+    silenceTimeoutRef.current =
+      setTimeout(() => {
 
-// WAIT FOR USER TO STOP SPEAKING
-silenceTimeoutRef.current =
-  setTimeout(() => {
+   try {
 
-    recognition.stop();
+  recognition.stop();
 
-    movingNextRef.current =
-      true;
+} catch (err) {
 
-    nextQuestion();
+  console.log(
+    "Stop Error"
+  );
+}
 
-    movingNextRef.current =
-      false;
+        // CLEAN TEXT
+        let cleanAnswer =
 
-  }, 3000);
+          finalTranscript
+            .trim()
+            .replace(
+              /\s+/g,
+              " "
+            );
+
+        // REMOVE DUPLICATE WORDS
+        const words =
+          cleanAnswer.split(
+            " "
+          );
+
+        cleanAnswer =
+          words.filter(
+            (
+              word,
+              index
+            ) => {
+
+              return (
+
+                word
+                  .toLowerCase()
+
+                !==
+
+                words[
+                  index - 1
+                ]
+                  ?.toLowerCase()
+              );
+            }
+          ).join(" ");
+
+        console.log(
+          "FINAL ANSWER:",
+          cleanAnswer
+        );
+
+        // SAVE ONLY FINAL ANSWER
+        const timeTaken = Math.max(1, Math.round((Date.now() - questionStartTimeRef.current) / 1000));
+        const wordCount = cleanAnswer ? cleanAnswer.trim().split(/\s+/).filter(Boolean).length : 0;
+
+        socket.emit(
+          "candidate-answer",
+          {
+
+            roomId,
+
+            interviewId,
+
+            question:
+              currentQuestionRef.current,
+
+            answer:
+              cleanAnswer,
+
+            timeTaken,
+
+            wordCount,
+          }
+        );
+
+        // FINAL UI
+        setCandidateAnswer(
+          cleanAnswer
+        );
+
+        movingNextRef.current =
+          true;
+
+        setTimeout(() => {
+
+          nextQuestion();
+
+          movingNextRef.current =
+            false;
+
+        }, 1000);
+
+        // RESET
+        finalTranscript =
+          "";
+
+      }, 4000);
   };
 
     recognitionRef.current = recognition;
@@ -731,7 +854,7 @@ silenceTimeoutRef.current =
           if (previousNoseX !== null) {
             const diff = Math.abs(nose.x - previousNoseX);
 
-            if (diff > 0.03) {
+            if (diff > 0.088) {
               showToast("Head Movement");
 
               socket.emit("track-time", {
@@ -828,6 +951,8 @@ silenceTimeoutRef.current =
 
     startTracking();
   }, [socket, roomId]);
+
+
 
   return (
     <div

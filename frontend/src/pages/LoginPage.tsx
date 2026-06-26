@@ -81,7 +81,7 @@ export default function LoginPage() {
       // LOGIN FAILED
       if (!response.ok) {
         throw new Error(
-          data.message ||
+          data.error||
             "Login failed"
         );
       }

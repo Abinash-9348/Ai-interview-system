@@ -14,6 +14,7 @@ import { codeexecuteRouter } from "./routes/codeexcute.routes.ts";
 import { userRouter } from "./routes/user.routes.ts";
 import Jdrouter from './routes/jd.routes.ts';
 import { generateQuestionRouter } from './routes/genereteQuestion.routes.ts';
+import { evaluteAnswerRouter } from './routes/evalute.routes.ts';
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use("/jd", Jdrouter)
 
 app.use("/question",generateQuestionRouter)
 
+app.use("/answer", evaluteAnswerRouter)
 // ================= SERVER =================
 server.listen(process.env.PORT, () => {
 

@@ -22,6 +22,16 @@ export const answerSchema =
       default: 0,
     },
 
+    accuracyScore: {
+      type: Number,
+      default: 0,
+    },
+
+    clarityScore: {
+      type: Number,
+      default: 0,
+    },
+
     feedback: String,
 
     correctAnswer: String,
@@ -31,3 +41,4 @@ export const answerSchema =
     wordCount: Number,
 
   });
+

@@ -65,7 +65,7 @@ export default function RegisterPage() {
     // IF API FAILED
     if (!response.ok) {
       throw new Error(
-        data.message || "Registration failed"
+        data.error || "Registration failed"
       );
     }
 

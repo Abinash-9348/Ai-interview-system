@@ -41,9 +41,28 @@ const interviewResultSchema =
         default: 100,
       },
 
+      strengths: {
+        type: [String],
+        default: []
+      },
+
+      weaknesses: {
+        type: [String],
+        default: []
+      },
+
+      recommendation: {
+        type: String,
+        default: ""
+      },
+
       finalFeedback: String,
+       resultstatus:{
+         type: String, enum: [ "PASSED", "DISQUALIFIED", ], default: "PASSED",
+   }
 
     },
+  
 
     {
       timestamps: true,
@@ -54,4 +73,4 @@ export const InterviewResult =
   mongoose.model(
     "InterviewResult",
     interviewResultSchema
-  );
+  );
