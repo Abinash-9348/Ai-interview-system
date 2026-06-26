@@ -24,7 +24,8 @@ app.use(
 
     origin: [
       "http://localhost:5173",
-      "https://code-editor-abinash.vercel.app"
+      "https://code-editor-abinash.vercel.app",
+      "https://ai-interview-system-eta.vercel.app"
     ],
 
     credentials: true,
